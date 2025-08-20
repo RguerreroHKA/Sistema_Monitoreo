@@ -1,29 +1,100 @@
-# Sistema/OS
-.DS_Store
-Thumbs.db
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# Entornos
+# Extensions
+*.so
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+.conda/
+conda/
+
+# Distribución / empaquetado
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+pip-wheel-metadata/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Logs / cobertura / pruebas
+*.log
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Traducciones
+*.mo
+*.pot
+
+# Django
+local_settings.py
+# Base de datos SQLite (normal ignorarla en desarrollo)
+db.sqlite3
+*.sqlite3
+*.sqlite3-journal
+
+# Archivos estáticos y media
+# NO ignores 'static/' si ahí guardas tus estáticos fuente
+staticfiles/         # salida de collectstatic
+media/               # archivos subidos por usuarios
+
+# Variables de entorno / configuraciones locales
 .env
 .env.*
 *.local
 
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Dependencias (descomenta si aplica)
-# node_modules/
-# vendor/
-
-# IDEs/Editors
+# IDEs / editores
 .vscode/
 .idea/
 *.iml
 
-# Compilados/Build
-dist/
-build/
-.out/
+# SO
+.DS_Store
+Thumbs.db
+
+# Tipado / análisis
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Docs
+docs/_build/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
