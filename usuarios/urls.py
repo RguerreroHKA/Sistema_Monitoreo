@@ -7,4 +7,7 @@ urlpatterns = [
    path('home/', views.home_view, name = 'home'),
    path('logout/', views.logout_view, name= 'logout'),
    path('admin-only/', views.vista_admin_only, name='admin_only'),
+
+   # Lista de usuarios (Solo admins
+   path('usuarios/', views.lista_usuarios, name='lista_usuarios'),
 ]

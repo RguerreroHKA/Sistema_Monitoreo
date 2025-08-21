@@ -1,0 +1,44 @@
+<h2>Gestion de Usuarios (Solo administradores)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0">
+    <thead>
+        <tr>
+            <th>Usuario</th>
+            <th>Email</th>
+            <th>Grupos</th>
+            <th>Activo</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for u in usuarios %}
+        <tr>
+            <td>{{ u.username }}</td>
+            <td>{{ u.email|default:'-' }}</td>
+            <td>
+                {% if u.groups.all %}
+                  {% for g in u.groups.all %}
+                    {{ g.name }}{% if not forloop.last %}, {% endif %}
+                  {% empty %}
+                    -
+                  {% endfor %}
+                {% else %}
+                  -
+                {% endif %}  
+            </td>
+            <td>{{ u.is_active|yesno:"Si,No" }}</td>
+            <td>
+                <!-- Acciones para los proximos pasos (crear/editar/eliminar) -->
+                <!-- De momento, solo placeholder -->
+                 <em>Pendiente (editar/eliminar)</em>
+            </td>
+        </tr>
+       {% empty %}
+        <tr><td colspan="5">No hay usuarios.</td></tr>
+       {% endfor %} 
+    </tbody>
+</table>
+
+<p style="margin-top: 12px">
+    <a href="{% url 'home' %}">Volver al inicio</a>
+</p>
