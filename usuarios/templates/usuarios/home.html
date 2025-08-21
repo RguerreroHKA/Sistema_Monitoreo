@@ -1,2 +1,7 @@
 <h1>Bienvenido {{ request.user.username }}</h1>
+
+{% if es_admin %}
+    <p><a href="{% url 'lista_usuarios' %}">Ir a Gestion de Usuarios</a></p>
+{% endif %}
+
 <a href="{% url 'logout' %}">Cerrar Sesion</a>
