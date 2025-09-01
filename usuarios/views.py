@@ -1,7 +1,8 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required, user_passes_test
-from .forms import FormularioRegistro
+from django.contrib import messages
+from .forms import FormularioRegistro, FormularioCrearUsuario
 from .models import UsuarioPersonalizado
 
 # Create your views here.
@@ -20,6 +21,19 @@ def lista_usuarios(request):
     usuarios = ( UsuarioPersonalizado.objects.all().prefetch_related('groups').order_by('username'))
     context = {'usuarios': usuarios}
     return render(request, 'usuarios/lista_usuarios.html', context)
+
+@login_required
+@user_passes_test(es_administrador)
+def crear_usuario(request):
+    if request.method == 'POST':
+        form = FormularioCrearUsuario(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Usuario creado exitosamente.")
+            return redirect('lista_usuarios')
+    else:
+        form = FormularioCrearUsuario()
+    return render(request, 'usuarios/crear_usuario.html', {'form': form})
 
 def registro_view(request):
     if request.method == 'POST':
