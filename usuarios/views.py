@@ -1,8 +1,8 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
-from .forms import FormularioRegistro, FormularioCrearUsuario
+from .forms import FormularioRegistro, FormularioCrearUsuario, FormularioEditarUsuario
 from .models import UsuarioPersonalizado
 
 # Create your views here.
@@ -34,6 +34,25 @@ def crear_usuario(request):
     else:
         form = FormularioCrearUsuario()
     return render(request, 'usuarios/crear_usuario.html', {'form': form})
+
+@login_required
+@user_passes_test(es_administrador)
+def editar_usuario(request, usuario_id):
+    """
+        Permite a un administrador editar la información de un usuario existente.    
+    """
+    usuario = get_object_or_404(UsuarioPersonalizado, id=usuario_id)
+
+    if request.method == 'POST':
+        form = FormularioEditarUsuario(request.POST, instance=usuario)
+        if form.is_valid():
+            form.save()
+            return redirect('lista_usuarios')
+    else:
+        form = FormularioEditarUsuario(instance=usuario)
+        
+    return render(request, "usuarios/editar_usuario.html", {"form": form, "usuario": usuario})
+    
 
 def registro_view(request):
     if request.method == 'POST':

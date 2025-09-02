@@ -11,5 +11,7 @@ urlpatterns = [
    # Lista de usuarios (Solo admins)
    path('usuarios/', views.lista_usuarios, name='lista_usuarios'),
    # Crear usuario (Solo admins)
-   path('usuarios/crear_usuario/', views.crear_usuario, name='crear_usuario')
+   path('usuarios/crear_usuario/', views.crear_usuario, name='crear_usuario'),
+   # Editar usuario (Solo admins)
+   path('usuarios/editar_usuario/<int:usuario_id>/', views.editar_usuario, name='editar_usuario')
 ]
