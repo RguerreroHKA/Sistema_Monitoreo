@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.contrib.auth.models import Group
 from .models import UsuarioPersonalizado
 
@@ -39,6 +39,38 @@ class FormularioCrearUsuario(UserCreationForm):
             usuario.save() # Se guarda y genera ID
             # Si se selecionaron algunos grupos, los asignamos
             grupos = self.cleaned_data.get('groups')
-            if grupos:
+            if grupos is not None:
                 usuario.groups.set(grupos) # Relacion (BD) de muchos a muchos (ManyToMany)
+        return usuario
+    
+class FormularioEditarUsuario(UserChangeForm):
+    """
+        Formulario para que los administradoes puedan editar usuarios existentes.
+        Hereda de UserChangeForm para incluir campos básicos de usuario y no reinventar la rueda.
+    """
+    password = None # Ocultamos el campo password ya que no es necesario editarlo aquí
+
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.all(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Asignar Grupos"
+    )
+
+    class Meta:
+        model = UsuarioPersonalizado
+        fields = ['username', 'email', 'groups', 'is_active']
+        # is_active permite activar/desactivar usuarios sin borrarlos
+        # groups permite asignar o cambiar grupos del usuario
+    
+    def save(self, commit=True):
+        """
+            Guardamos los cambios en el usuario y actualizamos sus grupos si se han modificado.
+        """
+        usuario = super().save(commit=False)
+        if commit:
+            usuario.save()
+            grupos = self.cleaned_data.get('groups')
+            if grupos is not None:
+                usuario.groups.set(grupos)
         return usuario
