@@ -5,10 +5,13 @@ from django.contrib import messages
 from .forms import FormularioRegistro, FormularioCrearUsuario, FormularioEditarUsuario
 from .models import UsuarioPersonalizado
 
-# Create your views here.
-
+# Decorador: Solo Admins
 def es_administrador(usuario):
+    return usuario.is_authenticated and (usuario.is_superuser or usuario.groups.filter(name='Administrador').exists())
+"""
+    Si se quiere solo admins (sin superuser) usar:
     return usuario.is_authenticated and usuario.groups.filter(name='Administrador').exists()
+"""
 
 #Prueba de vista para grupo Administrador
 @user_passes_test(es_administrador)
@@ -53,6 +56,29 @@ def editar_usuario(request, usuario_id):
         
     return render(request, "usuarios/editar_usuario.html", {"form": form, "usuario": usuario})
     
+@login_required
+@user_passes_test(es_administrador)
+def accion_usuario(request, usuario_id):
+    """
+        Permite a un administrador desactivar un usuario existente, si es superusuario se puede eliminar.
+    """
+    usuario = get_object_or_404(UsuarioPersonalizado, id=usuario_id)
+
+    if request.method == 'POST':
+        accion = request.POST.get('accion')
+
+        if accion == 'desactivar':
+            usuario.is_active = False
+            usuario.save()
+        elif accion == 'eliminar' and request.user.is_superuser:
+            usuario.delete()
+        
+        return redirect('lista_usuarios')
+    
+    return render(request, 'usuarios/accion_usuario.html', {'usuario': usuario, 'es_superuser': request.user.is_superuser})
+    
+    # confirmación antes de eliminar
+
 
 def registro_view(request):
     if request.method == 'POST':
