@@ -35,7 +35,8 @@
                 <!-- Acciones para los proximos pasos (crear/editar/eliminar) -->
                 <!-- De momento, solo placeholder -->
                  <!--<em>Pendiente (editar/eliminar)</em> -->
-                <a href="{% url 'editar_usuario' u.id %}">Editar</a>
+                <a href="{% url 'editar_usuario' u.id %}">Editar</a>  |
+                <a href="{% url 'accion_usuario' u.id %}">Acciones</a>
             </td>
         </tr>
        {% empty %}

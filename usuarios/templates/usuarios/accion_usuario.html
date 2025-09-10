@@ -1,0 +1,18 @@
+<h2>Acciones sobre el usuario: {{ usuario.username }}</h2>
+
+<p>Selecciona la accion que deseas realizar</p>
+
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" name="accion" value="desactivar">Desactivar</button>
+
+    {% if es_superuser %}
+        <button type="submit" name="accion" value="eliminar"
+                style="color: red; font-weight: bold;"
+                onclick="return confirm('¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.');">
+            Eliminar Permanentemente
+        </button>
+    {% endif %}
+
+    <a href="{% url 'lista_usuarios' %}">Cancelar</a>
+</form>

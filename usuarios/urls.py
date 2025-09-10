@@ -13,5 +13,7 @@ urlpatterns = [
    # Crear usuario (Solo admins)
    path('usuarios/crear_usuario/', views.crear_usuario, name='crear_usuario'),
    # Editar usuario (Solo admins)
-   path('usuarios/editar_usuario/<int:usuario_id>/', views.editar_usuario, name='editar_usuario')
+   path('usuarios/editar_usuario/<int:usuario_id>/', views.editar_usuario, name='editar_usuario'),
+   # Eliminar usuario (Solo admins)
+   path('usuarios/accion_usuario/<int:usuario_id>/', views.accion_usuario, name='accion_usuario'),
 ]
