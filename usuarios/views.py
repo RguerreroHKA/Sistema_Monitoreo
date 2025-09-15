@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
+from django.http import HttpResponseForbidden
 from .forms import FormularioRegistro, FormularioCrearUsuario, FormularioEditarUsuario
 from .models import UsuarioPersonalizado
 
@@ -18,8 +19,11 @@ def es_administrador(usuario):
 def vista_admin_only(request):
     return render(request, 'usuarios/admin_only.html')
 
-@user_passes_test(es_administrador)
+#@user_passes_test(es_administrador)
+@login_required
 def lista_usuarios(request):
+    if not es_administrador(request.user):
+        return HttpResponseForbidden("No tienes permiso para ver esta página.")
     # Prefetch de grupos para evitar consultas N+1
     usuarios = ( UsuarioPersonalizado.objects.all().prefetch_related('groups').order_by('username'))
     context = {'usuarios': usuarios}
