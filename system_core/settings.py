@@ -126,6 +126,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'usuarios.UsuarioPersonalizado'  # Use custom user model
 
-LOGIN_URL = 'login'  # Redirect to login page if not authenticated
-LOGIN_REDIRECT_URL = 'home'  # Redirect to home after login
-LOGOUT_REDIRECT_URL = 'login'  # Redirect to login after logout
+LOGIN_URL = 'usuarios:login'  # Redirect to login page if not authenticated
+LOGIN_REDIRECT_URL = 'usuarios:home'  # Redirect to home after login
+LOGOUT_REDIRECT_URL = 'usuarios:login'  # Redirect to login after logout

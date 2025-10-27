@@ -37,7 +37,7 @@ def crear_usuario(request):
         if form.is_valid():
             form.save()
             messages.success(request, "Usuario creado exitosamente.")
-            return redirect('lista_usuarios')
+            return redirect('usuarios:lista_usuarios')
     else:
         form = FormularioCrearUsuario()
     return render(request, 'usuarios/crear_usuario.html', {'form': form})
@@ -54,7 +54,7 @@ def editar_usuario(request, usuario_id):
         form = FormularioEditarUsuario(request.POST, instance=usuario)
         if form.is_valid():
             form.save()
-            return redirect('lista_usuarios')
+            return redirect('usuarios:lista_usuarios')
     else:
         form = FormularioEditarUsuario(instance=usuario)
         
@@ -77,7 +77,7 @@ def accion_usuario(request, usuario_id):
         elif accion == 'eliminar' and request.user.is_superuser:
             usuario.delete()
         
-        return redirect('lista_usuarios')
+        return redirect('usuarios:lista_usuarios')
     
     return render(request, 'usuarios/accion_usuario.html', {'usuario': usuario, 'es_superuser': request.user.is_superuser})
     
@@ -90,7 +90,7 @@ def registro_view(request):
         if form.is_valid():
             usuario = form.save()
             login(request, usuario)
-            return redirect('home')
+            return redirect('usuarios:home')
     else:
         form = FormularioRegistro()
     return render(request, 'usuarios/registro.html', {'form': form})
@@ -102,7 +102,7 @@ def login_view(request):
         usuario = authenticate(request, username=username, password=password)
         if usuario is not None:
             login(request, usuario)
-            return redirect('home')
+            return redirect('usuarios:home')
         else:
             return render(request, 'usuarios/login.html', {'error': 'Credenciales invalidas'})
     return render(request, 'usuarios/login.html')
@@ -114,4 +114,4 @@ def home_view(request):
 
 def logout_view(request):
     logout(request)
-    return redirect('login')
+    return redirect('usuarios:login')

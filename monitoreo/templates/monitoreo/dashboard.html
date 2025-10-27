@@ -1,0 +1,34 @@
+{% extends "usuarios/home.html" %} {% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-shield-alt"></i> Dashboard de Monitoreo de Anomalias</h2>
+    <p>Se han detectado <strong>{{ total_anomalias }}</strong> eventos de acceso anomalos.</p>
+
+    <div class="tabla-responsive">
+        <table class="table table-hover">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Fecha y Hora (Timestamp)</th>
+                    <th>usuario (Email)</th>
+                    <th>Direccion IP</th>
+                    <th>Archivo</th>
+                    <th>Tipo de Evento</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for evento in anomalias %}
+                <tr class="table-danger"> <td>{{ evento.timestamp }}</td>
+                    <td>{{ evento.email_usuario }}</td>
+                    <td>{{ evento.direccion_ip }}</td>
+                    <td>{{ evento.nombre_archivo }}</td>
+                    <td>{{ evento.tipo_evento }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center">¡Excelente! No se han detectado anomalías.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

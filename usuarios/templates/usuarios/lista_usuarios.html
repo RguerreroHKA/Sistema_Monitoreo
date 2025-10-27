@@ -1,7 +1,7 @@
 <h2>Gestion de Usuarios (Solo administradores)</h2>
 
 <p>
-  <a href="{% url 'crear_usuario' %}">+ Crear usuario</a>
+  <a href="{% url 'usuarios:crear_usuario' %}">+ Crear usuario</a>
 </p>
 
 <table border="1" cellpadding="6" cellspacing="0">
@@ -35,8 +35,8 @@
                 <!-- Acciones para los proximos pasos (crear/editar/eliminar) -->
                 <!-- De momento, solo placeholder -->
                  <!--<em>Pendiente (editar/eliminar)</em> -->
-                <a href="{% url 'editar_usuario' u.id %}">Editar</a>  |
-                <a href="{% url 'accion_usuario' u.id %}">Acciones</a>
+                <a href="{% url 'usuarios:editar_usuario' u.id %}">Editar</a>  |
+                <a href="{% url 'usuarios:accion_usuario' u.id %}">Acciones</a>
             </td>
         </tr>
        {% empty %}
@@ -46,5 +46,5 @@
 </table>
 
 <p style="margin-top: 12px">
-    <a href="{% url 'home' %}">Volver al inicio</a>
+    <a href="{% url 'usuarios:home' %}">Volver al inicio</a>
 </p>
