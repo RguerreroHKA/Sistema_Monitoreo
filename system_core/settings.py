@@ -129,3 +129,9 @@ AUTH_USER_MODEL = 'usuarios.UsuarioPersonalizado'  # Use custom user model
 LOGIN_URL = 'usuarios:login'  # Redirect to login page if not authenticated
 LOGIN_REDIRECT_URL = 'usuarios:home'  # Redirect to home after login
 LOGOUT_REDIRECT_URL = 'usuarios:login'  # Redirect to login after logout
+
+# --- CONFIGURACION DE LAS GOOGLE API ---
+#Usamos ael objeto BASE_DIR (que es un objeto path) para construir la ruta
+GOOGLE_SERVICE_ACCOUNT_FILE = BASE_DIR / 'service_account.json'
+GOOGLE_ADMIN_EMAIL = 'trodrigues@thefactoryhka.com'
+GOOGLE_TARGET_FOLDER_ID = '1dLoovhE4eulhPFyffNWgRWvb16zQIQkc'
