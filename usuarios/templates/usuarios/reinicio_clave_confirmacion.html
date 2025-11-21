@@ -1,0 +1,20 @@
+{% extends "usuarios/home.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="alert alert-success" role="alert">
+                <h4 class="alert-heading">¡Email Enviado!</h4>
+                <hr>
+                <p>Te hemos enviado un email con instrucciones para recuperar tu contraseña.</p>
+                <p><strong>Revisa tu bandeja de entrada.</strong></p>
+                <p>Si no ves el email, verifica tu carpeta de Spam.</p>
+                <p>El enlace expira en 24 horas.</p>
+                <hr>
+                <p class="mb-0"><a href="{% url 'usuarios:login' %}" class="btn btn-primary">Volver al Login</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

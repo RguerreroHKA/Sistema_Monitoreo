@@ -1,0 +1,18 @@
+{% extends "usuarios/home.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="alert alert-success" role="alert">
+                <h4 class="alert-heading">¡Contraseña Cambiada!</h4>
+                <hr>
+                <p>Tu contraseña ha sido cambiada exitosamente.</p>
+                <p>Ahora puedes ingresar con tu nueva contraseña.</p>
+                <hr>
+                <p class="mb-0"><a href="{% url 'usuarios:login' %}" class="btn btn-primary">Ir al Login</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

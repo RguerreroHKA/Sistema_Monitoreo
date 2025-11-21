@@ -1,8 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.views import PasswordResetView, PasswordResetConfirmView, PasswordResetCompleteView, PasswordResetDoneView
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.http import HttpResponseForbidden
+from django.urls import reverse_lazy
 from .forms import FormularioRegistro, FormularioCrearUsuario, FormularioEditarUsuario
 from .models import UsuarioPersonalizado
 
@@ -22,11 +25,26 @@ def vista_admin_only(request):
 #@user_passes_test(es_administrador)
 @login_required
 def lista_usuarios(request):
+    """
+    Vista para listar todos los usuarios (solo admin).
+    Incluye paginación de 10 usuarios por página.
+    """
     if not es_administrador(request.user):
         return HttpResponseForbidden("No tienes permiso para ver esta página.")
+    
     # Prefetch de grupos para evitar consultas N+1
-    usuarios = ( UsuarioPersonalizado.objects.all().prefetch_related('groups').order_by('username'))
-    context = {'usuarios': usuarios}
+    usuarios = UsuarioPersonalizado.objects.all().prefetch_related('groups').order_by('-fecha_creacion')
+    
+    # Paginación: 10 usuarios por página
+    paginator = Paginator(usuarios, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'usuarios': page_obj.object_list,  # Para compatibilidad con template
+    }
+    
     return render(request, 'usuarios/lista_usuarios.html', context)
 
 @login_required
@@ -115,3 +133,19 @@ def home_view(request):
 def logout_view(request):
     logout(request)
     return redirect('usuarios:login')
+
+class ReinicioClave(PasswordResetView):
+    template_name = 'usuarios/reinicio_clave.html' # password_reset.html
+    email_template_name = 'usuarios/email_reinicio_clave.html' # password_reset_email.html
+    success_url = reverse_lazy('usuarios:reinicio_clave_confirmacion') # password_reset_done
+    from_email = 'noreply@thefactoryhka.com'
+
+class ReinicioClaveConfimacion(PasswordResetDoneView):
+    template_name = 'usuarios/reinicio_clave_confirmacion.html' # password_reset_done
+
+class ReinicioClaveConfimar(PasswordResetConfirmView):
+    template_name = 'usuarios/reinicio_clave_confirmar.html' # password_reset_confirm.html
+    success_url = reverse_lazy('usuarios:reinicio_clave_exitoso') # password_reset_complete.html
+
+class ReinicioClaveExitoso(PasswordResetCompleteView):
+    template_name = 'usuarios/reinicio_clave_exitoso.html' # password_reset_complete.html

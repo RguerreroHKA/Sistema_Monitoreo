@@ -1,0 +1,16 @@
+{% autoescape off %}
+Hola {{ user.first_name }},
+
+Recibiste una solicitud para recuperar tu contraseña en The Factory HKA.
+
+Haz clic en el siguiente enlace para crear una nueva contraseña:
+
+{{ protocol }}://{{ domain }}{% url 'usuarios:reinicio_clave_confirmar' uidb64=uid token=token %}
+
+Este enlace expira en 24 horas.
+
+Si no solicitaste esto, puedes ignorar este email.
+
+Saludos,
+The Factory HKA Venezuela
+{% endautoescape %}
