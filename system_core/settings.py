@@ -135,3 +135,7 @@ LOGOUT_REDIRECT_URL = 'usuarios:login'  # Redirect to login after logout
 GOOGLE_SERVICE_ACCOUNT_FILE = BASE_DIR / 'service_account.json'
 GOOGLE_ADMIN_EMAIL = 'trodrigues@thefactoryhka.com'
 GOOGLE_TARGET_FOLDER_ID = '1dLoovhE4eulhPFyffNWgRWvb16zQIQkc'
+
+# Mostrar emails en consola (desarrollo)
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+

@@ -8,9 +8,24 @@ class FormularioRegistro(UserCreationForm):
         Formulario para el registro de nuevos usuarios. 
         Hereda de UserCreationForm para incluir campos básicos de usuario.
     """
+    
+    def clean_email(self):
+        """Validar que el email no esté registrado."""
+        email = self.cleaned_data.get('email')
+
+        # Verifica si ya existe el email
+        if UsuarioPersonalizado.objects.filter(email=email).exists():
+            raise forms.ValidationError(
+                "Este email ya está registrado. ¿Olvidaste tu contraseña? "
+                "Recuperala en /usuarios/reinicio-clave/"
+            )
+        return email
+    
     class Meta:
         model = UsuarioPersonalizado
         fields = ['username', 'email'] # Campos que queremos mostrar en el formulario
+
+        
 
 class FormularioCrearUsuario(UserCreationForm):
     # Formulario para que un administrador cree nuevos usuarios y los asigne a grupos.
