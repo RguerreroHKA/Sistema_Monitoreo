@@ -1,34 +1,488 @@
-{% extends "usuarios/home.html" %} {% block content %}
-<div class="container mt-4">
-    <h2><i class="fas fa-shield-alt"></i> Dashboard de Monitoreo de Anomalias</h2>
-    <p>Se han detectado <strong>{{ total_anomalias }}</strong> eventos de acceso anomalos.</p>
+{% extends "usuarios/home.html" %}
+{% load static %}
 
-    <div class="tabla-responsive">
-        <table class="table table-hover">
-            <thead class="thead-dark">
-                <tr>
-                    <th>Fecha y Hora (Timestamp)</th>
-                    <th>usuario (Email)</th>
-                    <th>Direccion IP</th>
-                    <th>Archivo</th>
-                    <th>Tipo de Evento</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for evento in anomalias %}
-                <tr class="table-danger"> <td>{{ evento.timestamp }}</td>
-                    <td>{{ evento.email_usuario }}</td>
-                    <td>{{ evento.direccion_ip }}</td>
-                    <td>{{ evento.nombre_archivo }}</td>
-                    <td>{{ evento.tipo_evento }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="5" class="text-center">¡Excelente! No se han detectado anomalías.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+{% block content %}
+
+<!-- CSRF Token para AJAX -->
+{% csrf_token %}
+<div class="container-fluid py-4">
+    
+    <!-- HEADER -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1 class="mb-0">
+                <i class="fas fa-shield-alt"></i> Dashboard de Monitoreo
+            </h1>
+            <p class="text-muted">Sistema automático de detección de anomalías en Google Drive</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-primary me-2" id="btn-sincronizar">
+                <i class="fas fa-sync"></i> Sincronizar
+            </button>
+            <button class="btn btn-warning" id="btn-detectar">
+                <i class="fas fa-robot"></i> Detectar
+            </button>
+        </div>
     </div>
+
+    <!-- MENSAJES DE ESTADO -->
+    <div id="alert-container"></div>
+
+    <!-- TARJETAS DE ESTADÍSTICAS -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-left-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="mb-0 text-muted small">Total de Eventos</p>
+                            <h3 class="mb-0 text-primary">{{ total_eventos }}</h3>
+                        </div>
+                        <i class="fas fa-file fa-3x text-primary opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-danger">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="mb-0 text-muted small">Anomalías Detectadas</p>
+                            <h3 class="mb-0 text-danger">{{ total_anomalias }}</h3>
+                        </div>
+                        <i class="fas fa-exclamation-triangle fa-3x text-danger opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="mb-0 text-muted small">Eventos Críticos</p>
+                            <h3 class="mb-0 text-warning">{{ anomalias_criticas }}</h3>
+                        </div>
+                        <i class="fas fa-bolt fa-3x text-warning opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="mb-0 text-muted small">Eventos Normales</p>
+                            <h3 class="mb-0 text-success">{{ total_eventos|add:total_anomalias|stringformat:"-d"|add:total_eventos }}</h3>
+                        </div>
+                        <i class="fas fa-check-circle fa-3x text-success opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ÚLTIMAS ANOMALÍAS -->
+    {% if anomalias_recientes %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-circle"></i> Últimas Anomalías Detectadas
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha y Hora</th>
+                                    <th>Usuario</th>
+                                    <th>IP</th>
+                                    <th>Archivo</th>
+                                    <th>Tipo de Evento</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for evento in anomalias_recientes %}
+                                <tr class="table-danger">
+                                    <td>
+                                        <small>{{ evento.timestamp|date:"d/m/Y H:i" }}</small>
+                                    </td>
+                                    <td>
+                                        <small>{{ evento.email_usuario }}</small>
+                                    </td>
+                                    <td>
+                                        <small><code>{{ evento.direccion_ip }}</code></small>
+                                    </td>
+                                    <td>
+                                        <small>{{ evento.nombre_archivo|truncatewords:3 }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-danger">{{ evento.tipo_evento }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- FILTROS -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-filter"></i> Filtros
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Anomalía</label>
+                            <select name="anomalia" class="form-select form-select-sm">
+                                <option value="">-- Todos --</option>
+                                <option value="si" {% if filtro_anomalia == 'si' %}selected{% endif %}>Sólo Anomalías</option>
+                                <option value="no" {% if filtro_anomalia == 'no' %}selected{% endif %}>Sólo Normales</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Tipo de Evento</label>
+                            <select name="tipo" class="form-select form-select-sm">
+                                <option value="">-- Todos --</option>
+                                {% for tipo in tipos_evento %}
+                                <option value="{{ tipo }}" {% if filtro_tipo == tipo %}selected{% endif %}>{{ tipo }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Usuario (Email)</label>
+                            <input type="text" name="usuario" class="form-control form-control-sm" 
+                                   placeholder="Buscar usuario..." value="{{ filtro_usuario }}">
+                        </div>
+
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-sm btn-primary w-100">
+                                <i class="fas fa-search"></i> Buscar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABLA DE EVENTOS -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list"></i> Todos los Eventos ({{ page_obj.paginator.count }} total)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if page_obj %}
+                        {% if page_obj.object_list %}
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Fecha y Hora</th>
+                                            <th>Usuario</th>
+                                            <th>IP</th>
+                                            <th>Archivo</th>
+                                            <th>Tipo</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for evento in page_obj %}
+                                        <tr {% if evento.es_anomalia %}class="table-danger"{% endif %}>
+                                            <td>
+                                                <small>{{ evento.timestamp|date:"d/m/Y H:i" }}</small>
+                                            </td>
+                                            <td>
+                                                <small>{{ evento.email_usuario }}</small>
+                                            </td>
+                                            <td>
+                                                <small><code>{{ evento.direccion_ip }}</code></small>
+                                            </td>
+                                            <td>
+                                                <small title="{{ evento.nombre_archivo }}">
+                                                    {{ evento.nombre_archivo|truncatewords:3 }}
+                                                </small>
+                                            </td>
+                                            <td>
+                                                <small>
+                                                    <span class="badge bg-info">{{ evento.tipo_evento }}</span>
+                                                </small>
+                                            </td>
+                                            <td>
+                                                {% if evento.es_anomalia %}
+                                                    <span class="badge bg-danger">
+                                                        <i class="fas fa-exclamation-triangle"></i> Anomalía
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-check"></i> Normal
+                                                    </span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- PAGINACIÓN -->
+                            <nav class="mt-4">
+                                <ul class="pagination justify-content-center">
+                                    {% if page_obj.has_previous %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1{% if filtro_anomalia %}&anomalia={{ filtro_anomalia }}{% endif %}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if filtro_usuario %}&usuario={{ filtro_usuario }}{% endif %}">
+                                                Primera
+                                            </a>
+                                        </li>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filtro_anomalia %}&anomalia={{ filtro_anomalia }}{% endif %}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if filtro_usuario %}&usuario={{ filtro_usuario }}{% endif %}">
+                                                &laquo; Anterior
+                                            </a>
+                                        </li>
+                                    {% endif %}
+
+                                    <li class="page-item active">
+                                        <span class="page-link">
+                                            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                                        </span>
+                                    </li>
+
+                                    {% if page_obj.has_next %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filtro_anomalia %}&anomalia={{ filtro_anomalia }}{% endif %}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if filtro_usuario %}&usuario={{ filtro_usuario }}{% endif %}">
+                                                Siguiente &raquo;
+                                            </a>
+                                        </li>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if filtro_anomalia %}&anomalia={{ filtro_anomalia }}{% endif %}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if filtro_usuario %}&usuario={{ filtro_usuario }}{% endif %}">
+                                                Última
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                </ul>
+                            </nav>
+                        {% else %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> 
+                                No hay eventos que coincidan con los filtros seleccionados.
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle"></i> 
+                            ¡Excelente! No se han detectado anomalías en el sistema.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
+
+<!-- ESTILOS CSS PERSONALIZADOS -->
+<style>
+    .card {
+        border: 1px solid #e3e6f0;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+        border-bottom: 1px solid #e3e6f0;
+    }
+
+    .border-left-primary {
+        border-left: 4px solid #4e73df !important;
+    }
+
+    .border-left-danger {
+        border-left: 4px solid #e74c3c !important;
+    }
+
+    .border-left-warning {
+        border-left: 4px solid #f39c12 !important;
+    }
+
+    .border-left-success {
+        border-left: 4px solid #27ae60 !important;
+    }
+
+    .table-hover tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.03);
+    }
+
+    .badge {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.6rem;
+    }
+
+    code {
+        background-color: #f5f7fa;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        font-size: 0.85rem;
+    }
+
+    .opacity-50 {
+        opacity: 0.5;
+    }
+
+    h1 {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .text-muted {
+        font-size: 0.95rem;
+    }
+</style>
+
+<!-- JAVASCRIPT PARA BOTONES -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const alertContainer = document.getElementById('alert-container');
+    const btnSincronizar = document.getElementById('btn-sincronizar');
+    const btnDetectar = document.getElementById('btn-detectar');
+
+    // Función para obtener CSRF token
+    function getCsrfToken() {
+        // Intenta múltiples ubicaciones
+        const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (csrfInput && csrfInput.value.length > 20) {
+            return csrfInput.value;
+        }
+
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        if (csrfMeta && csrfMeta.getAttribute('content').length > 20) {
+            return csrfMeta.getAttribute('content');
+        }
+
+        // Si no encuentra, log para debugging
+        console.warn('CSRF token no encontrado o inválido');
+        return '';
+    }
+
+    // Función para mostrar alertas
+    function mostrarAlerta(tipo, mensaje, es_error = false) {
+        const alertClass = es_error ? 'alert-danger' : 'alert-success';
+        const icono = es_error ? '<i class="fas fa-exclamation-circle"></i>' : '<i class="fas fa-check-circle"></i>';
+        
+        const alertaHTML = `
+            <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                ${icono} ${mensaje}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        
+        alertContainer.innerHTML = alertaHTML;
+        
+        // Auto-cerrar después de 5 segundos
+        setTimeout(() => {
+            alertContainer.innerHTML = '';
+        }, 5000);
+    }
+
+    // Botón Sincronizar
+    if (btnSincronizar) {
+        btnSincronizar.addEventListener('click', function(e) {
+            e.preventDefault();
+            btnSincronizar.disabled = true;
+            btnSincronizar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sincronizando...';
+
+            const csrfToken = getCsrfToken();
+            
+            fetch('{% url "monitoreo:api_sincronizar" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    mostrarAlerta('success', data.mensaje || 'Sincronización completada');
+                    // Recargar página después de 2 segundos
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    mostrarAlerta('error', data.error || 'Error en sincronización', true);
+                    btnSincronizar.disabled = false;
+                    btnSincronizar.innerHTML = '<i class="fas fa-sync"></i> Sincronizar';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                mostrarAlerta('error', 'Error: ' + error.message, true);
+                btnSincronizar.disabled = false;
+                btnSincronizar.innerHTML = '<i class="fas fa-sync"></i> Sincronizar';
+            });
+        });
+    }
+
+    // Botón Detectar
+    if (btnDetectar) {
+        btnDetectar.addEventListener('click', function(e) {
+            e.preventDefault();
+            btnDetectar.disabled = true;
+            btnDetectar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Detectando...';
+
+            const csrfToken = getCsrfToken();
+            
+            fetch('{% url "monitoreo:api_detectar" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    mostrarAlerta('success', data.mensaje || 'Detección completada');
+                    // Recargar página después de 2 segundos
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    mostrarAlerta('error', data.error || 'Error en detección', true);
+                    btnDetectar.disabled = false;
+                    btnDetectar.innerHTML = '<i class="fas fa-robot"></i> Detectar';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                mostrarAlerta('error', 'Error: ' + error.message, true);
+                btnDetectar.disabled = false;
+                btnDetectar.innerHTML = '<i class="fas fa-robot"></i> Detectar';
+            });
+        });
+    }
+});
+</script>
+
+
 {% endblock %}
