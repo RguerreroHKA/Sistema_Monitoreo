@@ -107,3 +107,6 @@ celerybeat.pid
 # Herramientas opcionales
 .python-version
 .tool-versions
+
+service_account.json
+cache_sgsi/
