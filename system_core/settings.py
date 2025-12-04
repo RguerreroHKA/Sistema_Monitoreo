@@ -139,3 +139,16 @@ GOOGLE_TARGET_FOLDER_ID = '1dLoovhE4eulhPFyffNWgRWvb16zQIQkc'
 # Mostrar emails en consola (desarrollo)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
+# ===============================
+# CONFIGURACIÓN DE ALERTAS
+# ===============================
+
+DEFAULT_FROM_EMAIL = 'rguerrero@thefactoryhka.com'
+
+ADMINS = [
+    ('Raynold Guerrero', 'rrguerrerop@gmail.com'),
+    # Agrega más admins si es necesario
+]
+
+SECURITY_OFFICER_EMAIL = 'rrguerrerop@gmail.com'  # Ajusta el email real
+MONITOR_EMAIL = 'raynoldguerrerop@gmail.com'  # Ajusta el email real
