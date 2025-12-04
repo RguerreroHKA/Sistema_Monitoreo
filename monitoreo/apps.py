@@ -7,7 +7,7 @@ class MonitoreoConfig(AppConfig):
 
     def ready(self):
         """
-        🔧 Inicializar signals cuando la app está lista
+        Inicializar signals cuando la app está lista
         
         Importante: Sin esto, los signals NO se activan
         """

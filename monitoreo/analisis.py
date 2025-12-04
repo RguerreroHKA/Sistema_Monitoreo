@@ -76,7 +76,11 @@ def ejecutar_deteccion_anomalias():
     ids_anomalos = df[df['es_anomalia']]['id'].tolist()
     
     # Actualizamos solo los que SÍ son anomalías esta vez
-    EventoDeAcceso.objects.filter(id__in=ids_anomalos).update(es_anomalia=True)
+    for evento_id in ids_anomalos:
+        evento = EventoDeAcceso.objects.get(id=evento_id)
+        evento.es_anomalia = True
+        # El score ya está en el modelo si lo agregamos antes
+        evento.save()  # TRIGGER: Activa signal de alerta
     
     print(f"Detección completada. Se marcaron {len(ids_anomalos)} eventos como anomalías.")
     return len(ids_anomalos)
