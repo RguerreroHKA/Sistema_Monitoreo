@@ -1,29 +1,75 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Monitoreo HKA</title>
-    
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
+{% extends 'base.html' %}
 
-    <div class="container mt-4">
-        <div class="d-flex justify-content-between align-items-center">
-            <h1>Bienvenido, {{ request.user.username }}</h1>
-            <a href="{% url 'usuarios:logout' %}" class="btn btn-outline-danger">Cerrar Sesión</a>
+{% block content %}
+<div class="container mt-4">
+    <div class="p-5 mb-4 bg-light rounded-3 shadow-sm border">
+        <div class="container-fluid py-2">
+            <h1 class="display-5 fw-bold text-primary">Bienvenido, {{ user.username }}!</h1>
+            <p class="col-md-8 fs-4">Sistema de Monitoreo de Seguridad Cloud (ISO 27001).</p>
+            <p>
+                Rol asignado: 
+                <span class="badge bg-dark">{{ user.rol.get_nombre_display|default:"Sin Rol" }}</span>
+                {% if user.es_activo %}
+                    <span class="badge bg-success">Activo</span>
+                {% else %}
+                    <span class="badge bg-danger">Inactivo</span>
+                {% endif %}
+            </p>
         </div>
-        <hr>
-
-        {% block content %}
-            {% if es_admin %}
-                <div class="alert alert-info" role="alert">
-                    <p class="mb-0">Como administrador, puedes <a href="{% url 'usuarios:lista_usuarios' %}" class="alert-link">gestionar los usuarios del sistema</a>.</p>
-                </div>
-            {% endif %}
-        {% endblock %}
     </div>
 
-</body>
-</html>
+    <div class="row">
+        {% if es_admin %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-primary shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0"><i class="fas fa-users-cog"></i> Administración</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Gestión centralizada de usuarios, roles y permisos del sistema.</p>
+                    <div class="d-grid">
+                        <a href="{% url 'usuarios:lista_usuarios' %}" class="btn btn-outline-primary">Gestionar Usuarios</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if puede_ver_anomalias or es_admin %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-danger shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="card-title mb-0"><i class="fas fa-shield-alt"></i> Seguridad Drive</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Visualización de anomalías, alertas de acceso y reportes de auditoría.</p>
+                    <div class="alert alert-warning py-1 px-2 mb-2">
+                        <small><i class="fas fa-hammer"></i> En desarrollo (Sprint 5)</small>
+                    </div>
+                    <div class="d-grid">
+                        <button class="btn btn-outline-danger disabled">Ver Dashboard IA</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-secondary shadow-sm">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="card-title mb-0"><i class="fas fa-user-circle"></i> Mi Perfil</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item"><strong>Email:</strong> {{ user.email }}</li>
+                        <li class="list-group-item"><strong>Último Acceso:</strong> {{ user.ultimo_acceso|date:"d/m/Y H:i" }}</li>
+                    </ul>
+                    <div class="d-grid">
+                        <a href="{% url 'usuarios:logout' %}" class="btn btn-outline-dark">Cerrar Sesión</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

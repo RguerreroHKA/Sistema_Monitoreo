@@ -1,12 +1,56 @@
-<h2>Editar Usuario: {{ usuario.username }}</h2>
+{% extends 'base.html' %}
 
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h3 class="card-title mb-0">Editar Usuario: {{ usuario.username }}</h3>
+                </div>
+                <div class="card-body">
+                    
+                    <form method="post">
+                        {% csrf_token %}
 
-  <button type="submit">Guardar Cambios</button>
-</form>
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
 
-<p>
-  <a href="{% url 'usuarios:lista_usuarios' %}">Volver al listado</a>
-</p>
+                        <div class="mb-3">
+                            <label class="form-label">Nombre de Usuario</label>
+                            {{ form.username }}
+                            <div class="text-danger small">{{ form.username.errors }}</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Correo Electrónico</label>
+                            {{ form.email }}
+                            <div class="text-danger small">{{ form.email.errors }}</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Rol del Sistema</label>
+                            {{ form.rol }}
+                            <div class="text-danger small">{{ form.rol.errors }}</div>
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            {{ form.es_activo }}
+                            <label class="form-check-label" for="{{ form.es_activo.id_for_label }}">
+                                Usuario Activo (Desmarcar para desactivar temporalmente)
+                            </label>
+                            <div class="text-danger small">{{ form.es_activo.errors }}</div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <a href="{% url 'usuarios:lista_usuarios' %}" class="btn btn-secondary me-md-2">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

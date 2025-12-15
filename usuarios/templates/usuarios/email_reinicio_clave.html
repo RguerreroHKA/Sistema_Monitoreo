@@ -1,16 +1,48 @@
-{% autoescape off %}
-Hola {{ user.first_name }},
-
-Recibiste una solicitud para recuperar tu contraseña en The Factory HKA.
-
-Haz clic en el siguiente enlace para crear una nueva contraseña:
-
-{{ protocol }}://{{ domain }}{% url 'usuarios:reinicio_clave_confirmar' uidb64=uid token=token %}
-
-Este enlace expira en 24 horas.
-
-Si no solicitaste esto, puedes ignorar este email.
-
-Saludos,
-The Factory HKA Venezuela
-{% endautoescape %}
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        /* Estilos en línea para compatibilidad con clientes de correo */
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f6f6f6; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .header { background-color: #0d6efd; color: #ffffff; padding: 20px; text-align: center; }
+        .content { padding: 30px; color: #333333; line-height: 1.6; }
+        .btn { display: inline-block; padding: 12px 24px; background-color: #198754; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 20px; }
+        .footer { background-color: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; }
+        .link-text { word-break: break-all; color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">The Factory HKA</h2>
+            <p style="margin:5px 0 0;">Seguridad Cloud & ISO 27001</p>
+        </div>
+        
+        <div class="content">
+            <p>Hola, <strong>{{ user.username }}</strong>.</p>
+            
+            <p>Hemos recibido una solicitud para recuperar el acceso a tu cuenta.</p>
+            
+            <p>Para crear una nueva contraseña, por favor haz clic en el siguiente botón (el enlace es válido por 24 horas):</p>
+            
+            <div style="text-align: center;">
+                <a href="{{ protocol }}://{{ domain }}{% url 'usuarios:reinicio_clave_confirmar' uidb64=uid token=token %}" class="btn">
+                    Restablecer Contraseña
+                </a>
+            </div>
+            
+            <p style="margin-top: 30px; font-size: 14px;">Si el botón no funciona, copia y pega el siguiente enlace en tu navegador:</p>
+            <p class="link-text"><small>{{ protocol }}://{{ domain }}{% url 'usuarios:reinicio_clave_confirmar' uidb64=uid token=token %}</small></p>
+            
+            <hr style="border:0; border-top:1px solid #eee; margin: 20px 0;">
+            <p style="font-size: 13px; color: #777;">Si no solicitaste este cambio, puedes ignorar este mensaje de forma segura. Tu cuenta permanece protegida.</p>
+        </div>
+        
+        <div class="footer">
+            <p>&copy; {% now "Y" %} The Factory HKA Venezuela. Todos los derechos reservados.</p>
+            <p>Este es un mensaje automático del Sistema de Monitoreo.</p>
+        </div>
+    </div>
+</body>
+</html>

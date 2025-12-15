@@ -1,2 +1,32 @@
-<h2>Solo los administradores pueden ver esto</h2>
-<p>Bienvenido {{ request.user.username }}</p>
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card border-danger shadow">
+                <div class="card-header bg-danger text-white">
+                    <h3 class="card-title mb-0">
+                        <i class="fas fa-user-shield"></i> Zona Restringida
+                    </h3>
+                </div>
+                <div class="card-body text-center">
+                    <div class="alert alert-success">
+                        <h4 class="alert-heading">¡Acceso Autorizado!</h4>
+                        <p>Bienvenido, <strong>{{ request.user.username }}</strong>.</p>
+                        <hr>
+                        <p class="mb-0">Si estás viendo esto, el sistema ha verificado correctamente que posees privilegios de <strong>Administrador</strong>.</p>
+                    </div>
+                    
+                    <img src="https://cdn-icons-png.flaticon.com/512/9638/9638362.png" alt="Secure" style="width: 100px; opacity: 0.8;" class="my-3">
+                    
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'usuarios:lista_usuarios' %}" class="btn btn-outline-danger">Ir a Gestión de Usuarios</a>
+                        <a href="{% url 'usuarios:home' %}" class="btn btn-secondary">Volver al Inicio</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

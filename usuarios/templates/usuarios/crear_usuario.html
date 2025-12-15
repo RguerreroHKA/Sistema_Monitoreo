@@ -1,48 +1,70 @@
-<h2>Crear Nuevo Usuario</h2>
+{% extends 'base.html' %}
 
-<form method="post">
-    {% csrf_token %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="card-title mb-0">Crear Nuevo Usuario</h3>
+                </div>
+                <div class="card-body">
+                    
+                    <form method="post">
+                        {% csrf_token %}
 
-    <!-- Muestra errores generales del formulario -->
-    {% if form.non_field_errors %}
-       <div style="color:red;">{{ form.non_field_errors }}</div>
-    {% endif %}
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
 
-    <p>
-        {{ form.username.label_tag }}<br>
-        {{ form.username }}
-        {{ form.username.errors }}
-    </p>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="{{ form.username.id_for_label }}" class="form-label">Usuario</label>
+                                {{ form.username }} <div class="text-danger small">{{ form.username.errors }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.email.id_for_label }}" class="form-label">Email</label>
+                                {{ form.email }}
+                                <div class="text-danger small">{{ form.email.errors }}</div>
+                            </div>
+                        </div>
 
-    <p>
-        {{ form.email.label_tag }}<br>
-        {{ form.email }}
-        {{ form.email.errors }}
-    </p>
+                        <div class="mb-3">
+                            <label for="{{ form.rol.id_for_label }}" class="form-label fw-bold">Rol Asignado (Obligatorio)</label>
+                            {{ form.rol }}
+                            <div class="text-danger small">{{ form.rol.errors }}</div>
+                            <div class="form-text">
+                                Seleccione 'Administrador' para gestión total, 'Auditor' para monitoreo o 'Visualizador' para solo lectura.
+                            </div>
+                        </div>
 
-    <!-- Passwords provienen de UserCreationForm -->
-     <p>
-        {{ form.password1.label_tag }}<br>
-        {{ form.password1 }}
-        {{ form.password1.errors}}
-     </p>
+                        <hr>
 
-     <p>
-        {{ form.password2.label_tag }}<br>
-        {{ form.password2 }}
-        {{ form.password2.errors }}
-     </p>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="{{ form.password1.id_for_label }}" class="form-label">Contraseña</label>
+                                {{ form.password1 }}
+                                <div class="text-danger small">{{ form.password1.errors }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.password2.id_for_label }}" class="form-label">Confirmar Contraseña</label>
+                                {{ form.password2 }}
+                                <div class="text-danger small">{{ form.password2.errors }}</div>
+                            </div>
+                        </div>
 
-     <fieldset>
-        <legend>Grupos</legend>
-        {{ form.groups }}
-        {{ form.groups.errors}}
-        <!-- form.groups usa CheckboxSelectMultiple gracias al widget -->
-     </fieldset>
-
-    <button type="submit">Crear Usuario</button>     
-</form>
-
-<p style="margin-top: 12x">
-    <a href="{% url 'usuarios:lista_usuarios' %}">Volver al listado</a>
-</p>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'usuarios:lista_usuarios' %}" class="btn btn-secondary me-md-2">Cancelar</a>
+                            <button type="submit" class="btn btn-success">Crear Usuario</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
