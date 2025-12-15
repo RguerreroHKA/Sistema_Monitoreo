@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('monitoreo', '0002_add_indexes'),
+        ('monitoreo', '0001_initial'),
     ]
 
     operations = [

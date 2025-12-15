@@ -1,12 +1,11 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
-from django.contrib.auth.models import Group
-from .models import UsuarioPersonalizado
+from .models import UsuarioPersonalizado, Role
 
 class FormularioRegistro(UserCreationForm):
     """ 
-        Formulario para el registro de nuevos usuarios. 
-        Hereda de UserCreationForm para incluir campos básicos de usuario.
+        Formulario para el autoregistro de nuevos usuarios. 
+        Por defecto, un usuario registrado por aquí no tiene Rol (o se le asigna Viewer en la vista).
     """
     
     def clean_email(self):
@@ -28,12 +27,14 @@ class FormularioRegistro(UserCreationForm):
         
 
 class FormularioCrearUsuario(UserCreationForm):
-    # Formulario para que un administrador cree nuevos usuarios y los asigne a grupos.
-    groups = forms.ModelMultipleChoiceField(
-        queryset=Group.objects.all(),
-        required=False,
-        widget=forms.CheckboxSelectMultiple,
-        label="Asignar Grupos"
+    """Formulario para que un administrador cree nuevos usuarios y les asigne un ROL."""
+    # Se Teemplaza 'groups' por 'rol'
+    rol = forms.ModelChoiceField(
+        queryset= Role.objects.filter(activo=True), #Solo roles activos
+        required= True, #Obligado asignar un rol al crear
+        widget= forms.Select(attrs={'class': 'form-control'}),
+        label="Asignar Rol",
+        empty_label= "Seleccione un Rol"
     )
 
     class Meta:
@@ -42,50 +43,36 @@ class FormularioCrearUsuario(UserCreationForm):
             Importante: password1 y password2 NO van en fields porque 
             son manejados por UserCreationForm.
         """
-        fields = ['username', 'email', 'groups']
+        fields = ['username', 'email', 'rol']
 
-    def save(self, commit=True):
-        """
-            Guardamos el usuario con contraseña hasheaada (UserCreationForm lo maneja),
-            y luego asignamos los grupos si se han seleccionado.
-        """
-        usuario = super().save(commit=False) # Creamos instancia del usuario sin guardar aún
-        if commit:
-            usuario.save() # Se guarda y genera ID
-            # Si se selecionaron algunos grupos, los asignamos
-            grupos = self.cleaned_data.get('groups')
-            if grupos is not None:
-                usuario.groups.set(grupos) # Relacion (BD) de muchos a muchos (ManyToMany)
-        return usuario
+    # Nota: Se deja de usar el metodo def save(). ya que no hace falta sobreescribir,
+    # Al ser 'rol' una FK en el modelo, Django lo guarda automaticamente
     
 class FormularioEditarUsuario(UserChangeForm):
     """
         Formulario para que los administradoes puedan editar usuarios existentes.
+        Permite cambiar el ROL y el estado de activación.
         Hereda de UserChangeForm para incluir campos básicos de usuario y no reinventar la rueda.
     """
-    password = None # Ocultamos el campo password ya que no es necesario editarlo aquí
+    password = None # Ocultamos el campo password
 
-    groups = forms.ModelMultipleChoiceField(
-        queryset=Group.objects.all(),
-        required=False,
-        widget=forms.CheckboxSelectMultiple,
-        label="Asignar Grupos"
+    rol = forms.ModelChoiceField(
+        queryset=Role.objects.filter(activo=True),
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-control'}),
+        label="Rol Asignado"
     )
 
     class Meta:
         model = UsuarioPersonalizado
-        fields = ['username', 'email', 'groups', 'is_active']
+        # Usamos 'es_activo' (el campo personalizado) o 'is_active' (django nativo).
+        # Como los sincronizamos en el modelo, usaremos 'es_activo' para ser consistentes.
+        fields = ['username', 'email', 'rol', 'es_activo']
         # is_active permite activar/desactivar usuarios sin borrarlos
         # groups permite asignar o cambiar grupos del usuario
     
-    def save(self, commit=True):
-        """
-            Guardamos los cambios en el usuario y actualizamos sus grupos si se han modificado.
-        """
-        usuario = super().save(commit=False)
-        if commit:
-            usuario.save()
-            grupos = self.cleaned_data.get('groups')
-            if grupos is not None:
-                usuario.groups.set(grupos)
-        return usuario
+    widgets = {
+        'username':  forms.TextInput(attrs={'class': 'form-control'}),
+        'email':     forms.EmailInput(attrs={'class': 'form-control'}),
+        'es_activo': forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    }

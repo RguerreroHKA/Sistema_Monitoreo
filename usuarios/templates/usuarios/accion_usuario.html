@@ -1,18 +1,63 @@
-<h2>Acciones sobre el usuario: {{ usuario.username }}</h2>
+{% extends 'base.html' %}
 
-<p>Selecciona la accion que deseas realizar</p>
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h3 class="mb-0"><i class="fas fa-exclamation-triangle"></i> Confirmar Acción</h3>
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Usuario: {{ usuario.username }}</h5>
+                    <p class="card-text">Email: {{ usuario.email }}</p>
+                    
+                    <p>Estado Actual: 
+                        {% if usuario.es_activo %}
+                            <span class="badge bg-success">Activo</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactivo / Eliminado Lógicamente</span>
+                        {% endif %}
+                    </p>
 
-<form method="post">
-    {% csrf_token %}
-    <button type="submit" name="accion" value="desactivar">Desactivar</button>
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="d-grid gap-3">
+                            {% if usuario.es_activo %}
+                                <div class="alert alert-warning">
+                                    <strong>¿Desactivar usuario?</strong><br>
+                                    El usuario perderá el acceso al sistema, pero sus registros de auditoría se mantendrán.
+                                </div>
+                                <button type="submit" name="accion" value="desactivar" class="btn btn-warning btn-lg">
+                                    <i class="fas fa-user-slash"></i> Desactivar Usuario
+                                </button>
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <strong>¿Reactivar usuario?</strong><br>
+                                    El usuario recuperará su acceso al sistema.
+                                </div>
+                                <button type="submit" name="accion" value="activar" class="btn btn-success btn-lg">
+                                    <i class="fas fa-user-check"></i> Restaurar Usuario
+                                </button>
+                            {% endif %}
 
-    {% if es_superuser %}
-        <button type="submit" name="accion" value="eliminar"
-                style="color: red; font-weight: bold;"
-                onclick="return confirm('¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.');">
-            Eliminar Permanentemente
-        </button>
-    {% endif %}
-
-    <a href="{% url 'usuarios:lista_usuarios' %}">Cancelar</a>
-</form>
+                            {% if es_superuser %} <hr>
+                                <div class="alert alert-danger">
+                                    <strong>ZONA DE PELIGRO (Solo Root):</strong><br>
+                                    Eliminar físicamente borrará todo rastro del usuario y su historial. No recomendado para auditoría ISO 27001.
+                                </div>
+                                <button type="submit" name="accion" value="eliminar_fisico" class="btn btn-outline-danger" onclick="return confirm('¿ESTÁS SEGURO? Esta acción es irreversible y borra la evidencia de auditoría.');">
+                                    <i class="fas fa-trash-alt"></i> ELIMINAR FÍSICAMENTE
+                                </button>
+                            {% endif %}
+                            
+                            <a href="{% url 'usuarios:lista_usuarios' %}" class="btn btn-secondary mt-2">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
