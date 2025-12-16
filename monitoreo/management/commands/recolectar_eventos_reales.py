@@ -309,8 +309,8 @@ def filtrar_pagina(activities, target_ids_set):
 ### MODIFICACIÓN DJANGO: Nueva función para cargar datos en la BD ###
 def guardar_eventos_en_db(eventos_relevantes):
     """
-    Toma la lista de eventos relevantes y los carga en el modelo EventoDeAcceso.
-    Usa update_or_create para evitar duplicados.
+        Toma la lista de eventos relevantes y los carga en el modelo EventoDeAcceso.
+        Usa el id_evento_google para evitar duplicados reales.
     """
     print(f"\n--- Paso 3: Cargando {len(eventos_relevantes)} eventos en la Base de Datos Django ---")
     
@@ -319,19 +319,29 @@ def guardar_eventos_en_db(eventos_relevantes):
     
     for evento in eventos_relevantes:
         try:
-            # Usamos update_or_create para evitar duplicados
-            # Busca un evento con esta combinación única. Si existe, lo actualiza.
-            # Si no existe, lo crea.
+            # Extraemos el ID único del evento de Google (está dentro de 'detalles_json')
+            # La estructura usual es: id: { time: "...", uniqueQualifier: "..." }
+            # Usaremos una combinación de time + uniqueQualifier como ID único
+            detalles = evento.get('detalles_json', {})
+            id_info = detalles.get('id', {})
+            unique_qualifier = id_info.get('uniqueQualifier', 'no_qualifier')
+            time_str = id_info.get('time', str(evento['timestamp']))
+
+            # Generamos un ID robusto
+            google_id = f"{time_str}_{unique_qualifier}"
+
+            # Usuamos update_or_create basandonos en el ID DE GOOGLE
             obj, created = EventoDeAcceso.objects.update_or_create(
-                timestamp=evento['timestamp'],
-                email_usuario=evento['usuario'],
-                archivo_id=evento['archivo_id'],
-                tipo_evento=evento['accion'],
+                id_evento_google = google_id, # Usamos el ID único
                 defaults={
-                    'direccion_ip': evento['ip'],
+                    'timestamp': evento['timestamp'],
+                    'email_usuario': evento['usuario'],
+                    'archivo_id': evento['archivo_id'],
                     'nombre_archivo': evento['archivo_titulo'],
-                    'detalles': evento['detalles_json'],
-                    'es_anomalia': False # El detector de IA lo marcará después
+                    'tipo_evento': evento['accion'],
+                    'direccion_ip': evento['ip'],
+                    'detalles': detalles,
+                    # 'es_anomalia' No se toca aqui, se deja como esté o False si es nuevo
                 }
             )
             
@@ -341,26 +351,33 @@ def guardar_eventos_en_db(eventos_relevantes):
                 eventos_actualizados += 1
         
         except Exception as e:
-            # Captura errores comunes, como IPs muy largas
+            # --- MANEJO DE ERRORES ---
+            # Si el error es específicamente por el campo de IP (ej: IPv6 malformada)
             if "direccion_ip" in str(e):
-                 print(f"Error guardando IP: {evento['ip']}. Guardando como 'IP Inválida'.")
-                 evento['ip'] = 'IP Inválida'
-                 # Reintentar guardado con IP corregida
-                 EventoDeAcceso.objects.update_or_create(
-                    timestamp=evento['timestamp'],
-                    email_usuario=evento['usuario'],
-                    archivo_id=evento['archivo_id'],
-                    tipo_evento=evento['accion'],
-                    defaults={
-                        'direccion_ip': evento['ip'],
-                        'nombre_archivo': evento['archivo_titulo'],
-                        'detalles': evento['detalles_json'],
-                        'es_anomalia': False
-                    }
-                )
+                 print(f"Error guardando IP: {evento['ip']}. Reintentando con IP genérica...")
+
+                 # --- INTENTO 2: REINTENTO ---
+                 try:
+                    obj, created = EventoDeAcceso.objects.update_or_create(
+                        id_evento_google=google_id,
+                        defaults={
+                            'timestamp': evento['timestamp'],
+                            'email_usuario': evento['usuario'],
+                            'archivo_id': evento['archivo_id'],
+                            'nombre_archivo': evento['archivo_titulo'],
+                            'tipo_evento': evento['accion'],
+                            'direccion_ip': '0.0.0.0', # <--- Usamos IP neutra para salvar el evento
+                            'detalles': detalles, # El JSON sí conserva la IP original para auditoría forense
+                        }
+                    )
+                    if created: eventos_creados += 1
+                    else: eventos_actualizados += 1
+                    print("   -> ¡Evento salvado exitosamente!")
+
+                 except Exception as e2:
+                     print(f"Error fatal incluso al reintentar: {e2}")
             else:
-                print(f"Error al guardar evento: {e}")
-                print(f"Datos del evento: {evento}")
+                print(f"Error no recuperable al guardar evento {evento.get('accion')}: {e}")
 
     print(f"✓ Carga a BD completada.")
     print(f"  -> Eventos nuevos creados: {eventos_creados}")
