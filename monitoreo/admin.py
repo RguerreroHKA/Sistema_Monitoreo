@@ -1,3 +1,4 @@
+import json
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import EventoDeAcceso
@@ -5,16 +6,7 @@ from .models import EventoDeAcceso
 @admin.register(EventoDeAcceso)
 class EventoDeAccesoAdmin(admin.ModelAdmin):
     """
-        ADMIN CONFIG PARA EventoDeAcceso - SPRINT 2
-    
-        Features:
-        ✅ Lista optimizada (mostrar campos clave)
-        ✅ Filtros por es_anomalia, tipo_evento, timestamp
-        ✅ Búsqueda por email y nombre_archivo
-        ✅ readonly_fields (proteger datos históricos)
-        ✅ date_hierarchy (navegación por fechas)
-        ✅ Fieldsets organizados
-        ✅ Permisos (sin agregar, sin borrar)
+        ADMIN CONFIG PARA EventoDeAcceso - SPRINT 2 (FINAL)
     """
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -49,7 +41,10 @@ class EventoDeAccesoAdmin(admin.ModelAdmin):
         'nombre_archivo',        # ✅ Buscar por nombre archivo
         'archivo_id',            # ✅ Buscar por ID de archivo
         'direccion_ip',          # ✅ Buscar por IP
+        'id_evento_google',
     ]
+
+    ordering = ['-timestamp']
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # CAMPOS SOLO LECTURA - No se pueden editar
@@ -62,15 +57,14 @@ class EventoDeAccesoAdmin(admin.ModelAdmin):
         'archivo_id',
         'nombre_archivo',
         'tipo_evento',
+        'tipo_evento_display',
         'es_anomalia',
-        'detalles',
+        #'detalles',
+        'json_bonito',
         'timestamp_formateado',  # Método personalizado
+        'id_evento_google',
     ]
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # NAVEGACIÓN POR FECHAS - Facilita navegar por timeline
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
     date_hierarchy = 'timestamp'
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -78,39 +72,34 @@ class EventoDeAccesoAdmin(admin.ModelAdmin):
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     fieldsets = (
+        ('Identificación del Evento', {
+            'fields': ('id_evento_google', 'timestamp_formateado', 'tipo_evento_display'),
+        }),
         ('Información del Usuario', {
             'fields': ('email_usuario', 'direccion_ip'),
-            'description': 'Quién accedió y desde dónde',
+            'description': 'Quién accedió y desde dónde (IP N/A indica procesos de sistema o sincronización)',
         }),
         ('Información del Archivo', {
             'fields': ('nombre_archivo', 'archivo_id'),
             'description': 'Qué archivo fue accedido',
         }),
-        ('Información Temporal', {
-            'fields': ('timestamp', 'timestamp_formateado'),
-            'description': 'Cuándo ocurrió el evento',
+        ('Análisis de Seguridad', {
+            'fields': ('es_anomalia',),
+            'description': 'Indicadores de riesgo detectados',
         }),
-        ('Análisis', {
-            'fields': ('tipo_evento', 'es_anomalia'),
-            'description': 'Tipo de evento e indicador de anomalía',
-        }),
-        ('Detalles JSON (Datos Crudos)', {
-            'fields': ('detalles',),
+        ('Evidencia Forense (JSON Crudo)', {
+            'fields': ('json_bonito',),
             'classes': ('collapse',),  # Colapsable de inicio
-            'description': 'Respuesta cruda de la API de Google Drive',
+            'description': 'Datos originales inmutables recibidos de Google Drive API',
         }),
     )
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # CONFIGURACIÓN DE ACCIONES
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    
     actions_on_top = True
     actions_on_bottom = True
     list_per_page = 50  # Mostrar 50 eventos por página
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # PERMISOS - Quitar opciones de agregar/borrar
+    # PERMISOS 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     
     def has_add_permission(self, request):
@@ -148,17 +137,34 @@ class EventoDeAccesoAdmin(admin.ModelAdmin):
     timestamp_formateado.short_description = 'Fecha y Hora Formateada'
 
     def tipo_evento_display(self, obj):
-        """Muestra tipo de evento con ícono"""
+        """
+            Muestra solo el texto en español con el icono.
+            Si el evento no está en el diccionario, muestra el original.
+        """
         iconos = {
             'view': '👁️ Consultado',
             'download': '⬇️ Descargado',
             'edit': '✏️ Editado',
             'delete': '🗑️ Eliminado',
             'share': '📤 Compartido',
+            'create': '✨ Creado',
+            'move': '🚚 Movido',
+            'rename': '🏷️ Renombrado',
+            'upload': '⬆️ Subido',
+            'print': '🖨️ Impreso',
+            'access_item_content': '📄 Contenido Accedido',
+            'change_user_access': '📄 Cambio de Acceso de Usuario',
+            'source_copy': '📄 Se copió',
+            'sync_item_content': '⬇️ Se sincronizó el contenido',
+            'request_access': '✋ Solicitud Acceso',
+            'deny_access_request': '🚫 Acceso Denegado',
+            'add_lock': '🔒 Archivo Bloqueado',
+            'remove_lock': '🔓 Archivo Desbloqueado',
         }
-        icono = iconos.get(obj.tipo_evento, '📄 Listado')
-        return f'{icono} {obj.tipo_evento}'
-    tipo_evento_display.short_description = 'Tipo Evento'
+        # Devuelve el valor del diccionario. Si no existe, devuelve el evento original
+        return iconos.get(obj.tipo_evento, f'📄 {obj.tipo_evento}')
+    
+    tipo_evento_display.short_description = 'Acción'
 
     def anomalia_badge(self, obj):
         """
@@ -168,43 +174,45 @@ class EventoDeAccesoAdmin(admin.ModelAdmin):
         """
         if obj.es_anomalia:
             return format_html(
-                '<span style="background-color: #ff6b6b; color: white; padding: 3px 8px; border-radius: 3px; font-weight: bold;">ANOMALÍA</span>'
+                '<span style="background-color: #dc3545; color: white; padding: 4px 10px; border-radius: 15px; font-weight: bold; font-size: 12px;">⚠️ ANOMALÍA</span>'
             )
         else:
             return format_html(
-                '<span style="background-color: #51cf66; color: white; padding: 3px 8px; border-radius: 3px;">Normal</span>'
+                '<span style="background-color: #28a745; color: white; padding: 4px 10px; border-radius: 15px; font-size: 12px;">Normal</span>'
             )
     anomalia_badge.short_description = 'Estado'
     
     def nombre_archivo_short(self, obj):
         """Trunca nombre largo a 30 caracteres"""
-        if len(obj.nombre_archivo) > 30:
-            return f"{obj.nombre_archivo[:27]}..."
+        if obj.nombre_archivo and len(obj.nombre_archivo) > 40:
+            return f"{obj.nombre_archivo[:37]}..."
         return obj.nombre_archivo
     nombre_archivo_short.short_description = 'Archivo'
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # ORDENAMIENTO Y BÚSQUEDA
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    def json_bonito(self, obj):
+        """Formatea el JSON para que sea legible"""
+        if not obj.detalles:
+            return "_"
+        
+        # Convertimos a string con indentacion
+        json_str = json.dumps(obj.detalles, indent=4, sort_keys=True)
 
-    ordering = ['-timestamp']  # Más recientes primero
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # INFORMACIÓN ADICIONAL
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    def get_queryset(self, request):
+        # Estilos CCS para que parezca un editor de codigo oscuro
+        style = """
+            background-color: #2b2b2b; 
+            color: #a9b7c6; 
+            padding: 15px; 
+            border-radius: 8px; 
+            font-family: 'Consolas', 'Monaco', monospace; 
+            font-size: 12px;
+            white-space: pre-wrap;
+            border: 1px solid #444;
         """
-        Optimizar query para evitar N+1
-        Aunque en este caso no hay relaciones FK, pero buena práctica
-        """
-        queryset = super().get_queryset(request)
-        return queryset.select_related()  # Preparado para futuras relaciones
+
+        # Django escapará el contenido de forma segura y no intentará interpretar el JSON
+        return format_html('<pre style="{}">{}</pre>', style, json_str)
     
-    class Meta:
-        model = EventoDeAcceso
-        verbose_name = '📌 Evento de Acceso'
-        verbose_name_plural = '📌 Eventos de Acceso'
+    json_bonito.short_description = 'Evidencia JSON'
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # CONFIGURACIÓN GLOBAL DEL ADMIN

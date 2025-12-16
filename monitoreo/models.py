@@ -3,14 +3,29 @@ from django.db import models
 # Create your models here.
 class EventoDeAcceso(models.Model):
     """
-        Modelo para registrar eventos de acceso de usuarios
+        Modelo para registrar eventos de acceso de usuarios (Drive Activity API).
     """
+    # Identificador único del evento provisto por Google (Vital para evitar duplicados al sincronizar)
+    id_evento_google = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        help_text="ID unico del evento en Google Drive Activity API"
+    )
+
     email_usuario = models.EmailField(help_text="Email del usuario que realizo la accion")
-    direccion_ip = models.GenericIPAddressField(help_text="Direccion IP desde dinde se realizo la accion")
-    timestamp = models.DateTimeField()
-    archivo_id = models.CharField(max_length=255, unique=True)
-    nombre_archivo = models.CharField(max_length=255)
-    tipo_evento = models.CharField(max_length=50, help_text="Ej: 'view', 'download', 'edit'")
+    direccion_ip = models.GenericIPAddressField(
+        null=True, blank=True,
+        help_text="Direccion IP desde dinde se realizo la accion"
+    )
+    timestamp = models.DateTimeField(help_text="Fecha y hora exacta del evento (UTC)")
+
+    archivo_id = models.CharField(max_length=255, help_text="ID del archivo en Google Drive")
+    nombre_archivo = models.CharField(max_length=255, null=True, blank=True)
+
+    tipo_evento = models.CharField(max_length=50, help_text="Ej: 'view', 'download', 'edit', move")
+
+    # Campos para IA y Auditoria
     es_anomalia = models.BooleanField(default=False, help_text="Marcado por el modelo de IA como una anomalía.")
     detalles = models.JSONField(null=True, blank=True, help_text="Datos originales en crudo de la API.")
 
@@ -43,7 +58,8 @@ class EventoDeAcceso(models.Model):
 
     def __str__(self):
         # Esto ayuda a que los registros se vean bien en el panel de admin
-        return f"{self.timestamp.strftime("%Y-%m-%d %H:%M")} - {self.email_usuario} accedió a {self.nombre_archivo}"
+        fecha = self.timestamp.strftime('%Y-%m-%d %H:%M')
+        return f"{fecha} - {self.email_usuario} -> {self.tipo_evento} en {self.nombre_archivo}"
     
     class Meta:
         # Ordena los eventos del mas reciente al mas antiguo
@@ -53,7 +69,7 @@ class EventoDeAcceso(models.Model):
         indexes = [
             models.Index(fields=['email_usuario', '-timestamp'], name='idx_email_timestamp'),
             models.Index(fields=['es_anomalia', '-timestamp'], name='idx_anomalia_timestamp'),
-            models.Index(fields=['tipo_evento', '-timestamp'], name='idx_tipo_timestamp'),
-            models.Index(fields=['archivo_id'], name='idx_archivo_id'),
+            models.Index(fields=['tipo_evento'], name='idx_tipo_evento'), # Simplificado
+            models.Index(fields=['id_evento_google'], name='idx_id_google'), # Índice para búsquedas rápidas al sincronizar
             models.Index(fields=['timestamp'], name='idx_timestamp'),
         ]
