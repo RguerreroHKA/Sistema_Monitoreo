@@ -1,62 +1,51 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
-from datetime import datetime
+from django.http import JsonResponse
+from django.db.models import Q
+from django.utils import timezone
+
+# Importamos Modelos
 from .models import EventoDeAcceso
-from .management.commands.recolectar_eventos_reales import GoogleDriveCollector
-from .analisis import ejecutar_deteccion_anomalias
 
-def limpiar_evento_para_json(evento):
-    """
-    Convierte objetos datetime a strings para que sean JSON serializable.
-    Recorre recursivamente el diccionario y convierte cualquier datetime a ISO string.
-    """
-    if isinstance(evento, dict):
-        return {k: limpiar_evento_para_json(v) for k, v in evento.items()}
-    elif isinstance(evento, list):
-        return [limpiar_evento_para_json(item) for item in evento]
-    elif isinstance(evento, datetime):
-        return evento.isoformat()
-    else:
-        return evento
+# --- IMPORTANTE: Reutilizamos la lógica probada del Sprint 2 ---
+# Esto evita duplicar código y errores de inconsistencia en la BD
+try:
+    from .management.commands.recolectar_eventos_reales import GoogleDriveCollector, guardar_eventos_en_db
+except ImportError:
+    GoogleDriveCollector = None
+    guardar_eventos_en_db = None
 
+# --- INTEGRACION CON SPRINT 4 (FUTURO) ---
+"""try:
+    from .analisis import ejecutar_deteccion_anomalias
+except ImportError:
+    # Placeholder para que no falle si el archivo analisis.py aun no existe
+    def ejecutar_deteccion_anomalias(): return 0
+"""
+# --- VISTAS ---
 
 @login_required
 def dashboard_anomalias(request):
-    # Buscamos en la BD solo los eventos marcados como anomalias (es_anomalias=True)
-    anomalias = EventoDeAcceso.objects.filter(es_anomalia=True)
-
-    context={
-        'anomalias': anomalias,
-        'total_anomalias': anomalias.count(),
-    }
-
-    # Renderizamos la plantilla HTML con los datos de anomalias
-    return render(request, 'monitoreo/dashboard.html', context)
+    """Redirección para mantener compatibilidad"""
+    return redirect('monitoreo:dashboard-v2')
 
 @login_required
 def dashboard_monitoreo(request):
     """
-        Dashboard completo de monitoreo con estadísticas, filtros y paginación.
-
-        Parámetros GET:
-        - anomalia: 'si' / 'no' / '' (todos)
-        - tipo: tipo de evento para filtrar
-        - usuario: email de usuario para filtrar
-        - page: número de página
+       Dashboard completo de monitoreo con estadísticas, filtros y paginación.
     """
-
-    #1.  Obtener parámetros de filtro desde GET
+    #1.  Obtener parámetros de filtro
     filtro_anomalia = request.GET.get('anomalia', '')
     filtro_tipo = request.GET.get('tipo', '')
     filtro_usuario = request.GET.get('usuario', '')
+    busqueda_q = request.GET.get('q', '')
 
-    # 2. Construir QuerySet base
+    # 2. QuerySet Base (Ordenado por fecha)
     eventos = EventoDeAcceso.objects.all().order_by('-timestamp')
 
-    #3. Aplicar Filtros
+    #3. Aplicar Filtros Dinámicos
     if filtro_anomalia == 'si':
         eventos = eventos.filter(es_anomalia=True)
     elif filtro_anomalia == 'no':
@@ -67,174 +56,124 @@ def dashboard_monitoreo(request):
 
     if filtro_usuario:
         eventos = eventos.filter(email_usuario__icontains=filtro_usuario)
+
+    # Filtro de Búsqueda General (El Q object)
+    if busqueda_q:
+        eventos = eventos.filter(
+            Q(email_usuario__icontains=busqueda_q) |
+            Q(nombre_archivo__icontains=busqueda_q) |
+            Q(direccion_ip__icontains=busqueda_q)
+        )
     
-    #4. Calcular estadisticas
+    #4. Calcular estadísticas (KPIs)
     total_eventos = EventoDeAcceso.objects.count()
-    anomalias = EventoDeAcceso.objects.filter(es_anomalia=True)
-    total_anomalias = anomalias.count()
-    anomalias_criticas = anomalias.count() # TODO: implementar severidad futura
+    qs_anomalias = EventoDeAcceso.objects.filter(es_anomalia=True)
+    total_anomalias = qs_anomalias.count()
 
-    #5. Obtener ultimas anomalias
-    anomalias_recientes = EventoDeAcceso.objects.filter(
-        es_anomalia=True
-    ).order_by('-timestamp')[:20]
+    eventos_nomrales = total_eventos - total_anomalias
 
-    #6. Aplicar Paginacion
-    paginator = Paginator(eventos, 50) # 20 eventos por pagina
+    # Recuperamos anomalias_criticas para tu tarjeta amarilla
+    # (Se llenará realmente en el Sprint 4)
+    anomalias_criticas = qs_anomalias.filter(severidad__in=['ALTA', 'CRITICA']).count()
+
+    # 5. Tabla de "Últimas Anomalías"
+    anomalias_recientes = qs_anomalias.order_by('-timestamp')[:10]
+
+    #6. Paginación
+    paginator = Paginator(eventos, 20) # 20 eventos por pagina para mejor visualizacion
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    #7. Obtener lista de tipos unicos para busqueda de filtro
+    #7. Listas para el Select de Tipos
     tipos_evento = EventoDeAcceso.objects.values_list(
         'tipo_evento', flat=True
     ).distinct().order_by('tipo_evento')
 
     #8. Preparar contexto para plantilla
     context = {
-        'total_eventos':        total_eventos,
-        'total_anomalias':      total_anomalias,
-        'anomalias_criticas':   anomalias_criticas,
-        'anomalias_recientes':  anomalias_recientes,
-        'page_obj':             page_obj,
-        'tipos_eventos':        tipos_evento,
+        'page_obj':             page_obj,               # Para la tabla principal
+        'total_eventos':        total_eventos,          # KPI Azul
+        'total_anomalias':      total_anomalias,        # KPI Rojo
+        'eventos_normales':     eventos_nomrales,
+        'anomalias_criticas':   anomalias_criticas,     # KPI Amarillo
+        'anomalias_recientes':  anomalias_recientes,    # Tabla Pequeña roja
+        'tipos_evento':         tipos_evento,           # Para el <select>
+        # Mantener el estado de los filtros en la vista
         'filtro_anomalia':      filtro_anomalia,
         'filtro_tipo':          filtro_tipo,
         'filtro_usuario':       filtro_usuario,
+        'busqueda_q':           busqueda_q,
     }
 
     return render(request, 'monitoreo/dashboard.html', context)
+
+# --- APIs (AJAX) ---
 
 @login_required
 @require_http_methods(["POST"])
 def api_sincronizar_eventos(request):
     """
-    API: Sincroniza eventos desde Google Drive Activity API a BD.
+        API para el botón 'Sincronizar'.
+        Usa el recolector del Sprint 2 para mantener consistencia.
     """
+    if not GoogleDriveCollector:
+        return JsonResponse({'success': False, 'message': 'Error: Collector no encontrado'}, status=500)
+
     try:
+        #1. Instanciar Recolector
         collector = GoogleDriveCollector()
+
+        #2. Obtener eventos crudos de Google
         eventos_raw = collector.obtener_eventos()
 
         if not eventos_raw:
             return JsonResponse({
                 'success': True,
-                'mensaje': 'Sin cambios - No hay nuevos eventos para sincronizar',
-                'eventos_procesados': 0,
-                'eventos_nuevos': 0,
-                'eventos_duplicados': 0
-            }, status=200)
+                'mensaje': 'Sincronización completada. No se encontraron eventos nuevos.',
+                'nuevos': 0,
+            })
         
-        eventos_nuevos = 0
-        eventos_duplicados = 0
+        # 3. Guardar en BD (Reutilizando lógica del Sprint 2)
 
-        for evento_raw in eventos_raw:
-            evento_id = evento_raw.get('archivo_id', 'unknown')
+        count_inicio = EventoDeAcceso.objects.count()
+        guardar_eventos_en_db(eventos_raw)
+        count_fin = EventoDeAcceso.objects.count()
 
-            try:
-                # El timestamp YA viene como datetime desde recolectar_eventos_reales.py
-                timestamp = evento_raw.get('timestamp')
-                
-                # Si aún es None, usar ahora
-                if timestamp is None:
-                    from django.utils import timezone
-                    timestamp = timezone.now()
-                    print(f"⚠️ Timestamp nulo para evento {evento_id}, usando ahora: {timestamp}")
+        nuevos = count_fin - count_inicio
 
-                # Serializar evento para JSON
-                evento_raw_serializable = limpiar_evento_para_json(evento_raw)
-
-                # Crear una clave única combinando archivo_id + usuario + timestamp + acción
-                evento_unico_id = f"{evento_raw.get('archivo_id')}_{evento_raw.get('usuario')}_{timestamp}_{evento_raw.get('accion')}"
-
-                evento, created = EventoDeAcceso.objects.get_or_create(
-                    archivo_id=evento_id,
-                    email_usuario=evento_raw.get('usuario', 'desconocido@google.com'),
-                    timestamp=timestamp,
-                    tipo_evento=evento_raw.get('accion', 'unknown'),
-                    defaults={
-                        'direccion_ip': evento_raw.get('ip', '0.0.0.0'),
-                        'nombre_archivo': evento_raw.get('archivo_titulo', 'sin nombre'),
-                        'es_anomalia': False,
-                        'detalles': evento_raw_serializable,
-                    }
-                )
-
-                
-                if created:
-                    eventos_nuevos += 1
-                else:
-                    eventos_duplicados += 1
-                    
-            except Exception as e:
-                print(f"❌ Error guardando evento {evento_id}: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                continue
-        
-        mensaje = f'✅ Sincronización completada: {eventos_nuevos} eventos nuevos guardados'
-        if eventos_duplicados > 0:
-            mensaje += f', {eventos_duplicados} duplicados ignorados'
-            
         return JsonResponse({
             'success': True,
-            'eventos_nuevos': eventos_nuevos,
-            'eventos_duplicados': eventos_duplicados,
-            'total_eventos': len(eventos_raw),
-            'mensaje': mensaje,
-            'eventos_procesados': eventos_nuevos
-        }, status=200)
-
+            'mensaje': f'Sincronización exitosa. {nuevos} eventos nuevos registrados.',
+            #'nuevos': nuevos,
+            #'total_procesados': len(eventos_raw)
+        })
+    
     except Exception as e:
-        import traceback
-        error_msg = f"Error en sincronización: {str(e)}"
-        print(f"❌ TRACEBACK: {traceback.format_exc()}")
-
-        return JsonResponse({
-            'success': False,
-            'error': error_msg,
-            'mensaje': 'Error durante la sincronización. Revisa los logs.',
-            'eventos_procesados': 0
-        }, status=500)
-
-
+        # Log del error en la consola para debugging
+        print(f"Error Sync API: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
     
 @login_required
 @require_http_methods(["POST"])
 def api_ejecutar_deteccion(request):
     """
-        API: Ejecuta detección de anomalías usando Isolation Forest.
-    
-        Retorna:
-        {
-            'success': True/False,
-            'anomalias_detectadas': int,
-            'eventos_procesados': int,
-            'mensaje': str,
-            'error': str (si hay error)
-        }
+        API Placeholder para el botón 'Detectar' (Sprint 3).
+        Evita que el botón de error hasta que integremos la IA en el Sprint 4.
     """
 
-    try:
-        #1. Ejecutar funcion de deteccion (usa la funcion ejecutar_deteccion_anomalias)
+    """try:
+        # Ejecutamos la función de análisis
         contador_anomalias = ejecutar_deteccion_anomalias()
-
-        #2. Contar Eventos procesados
-        eventos_procesados = EventoDeAcceso.objects.count()
-
-        #3. Retornar Resultados
-        return JsonResponse({
-            'success': True,
-            'anomalias_detectadas': contador_anomalias,
-            'eventos_procesados': eventos_procesados,
-            'mensaje': f'✅ Detección completada. {contador_anomalias} anomalías detectadas.'
-        })
-    
-    except Exception as e:
-        import traceback
-        error_msg = f"Error en detección: {str(e)}"
-        print(f"TRACEBACK: {traceback.format_exc()}")
         
         return JsonResponse({
-            'success': False,
-            'error': error_msg,
-            'mensaje': 'Error durante la detección'
-        }, status=500)
+            'success': True,
+            'mensaje': f'Análisis completado. {contador_anomalias} anomalías detectadas.'
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+    """
+
+    return JsonResponse({
+        'success': True,
+        'mensaje': 'El módulo de IA se integrará completamente en el Sprint 4. Botón funcional.'
+    })
