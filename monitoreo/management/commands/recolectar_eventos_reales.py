@@ -3,6 +3,7 @@ import os
 import time
 import json
 import pickle
+import hashlib
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,9 +26,10 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive.readonly'
 ]
 
+# Parametros Sprint4
 # AJUSTA ESTOS VALORES según necesites
 DIAS_A_CONSULTAR = 30  # Empecemos con 30 días para pruebas
-UMBRAL_DIAS_TABLA = 30
+#UMBRAL_DIAS_TABLA = 30
 MAX_WORKERS = 5
 BATCH_SIZE = 1000
 MAX_RETRIES = 3
@@ -36,7 +38,19 @@ CACHE_DIR = Path("cache_sgsi")
 INVENTORY_CACHE_FILE = CACHE_DIR / "inventory_cache.pkl"
 CACHE_EXPIRY_HOURS = 24
 
-# --- INICIO DE TU SCRIPT ORIGINAL (adaptado a funciones) ---
+# --- FUNCIONES AUXILIARES ---
+
+def generar_id_unico(fecha_iso, email, archivo_id, accion):
+    """
+        Generar un ID unico (Hash MD5) identico al del script de carga historica.
+        Esto evita duplicados al mezclar datos offline y online.
+    """
+    # Si la fecha es un objeto datetime, convertir a ISO string
+    if isinstance(fecha_iso, datetime):
+        fecha_iso = fecha_iso.isoformat()
+
+    raw_string = f"{fecha_iso}_{email}_{archivo_id}_{accion}"
+    return hashlib.md5(raw_string.encode('utf-8')).hexdigest()
 
 def autenticar_cuenta_servicio():
     print("Autenticando con la cuenta de Servicio...")
@@ -47,10 +61,6 @@ def autenticar_cuenta_servicio():
         delegated_creds = creds.with_subject(EMAIL_ADMIN)
         print("Autenticacion exitosa.")
         return delegated_creds
-    except FileNotFoundError:
-        print(f"ERROR: No se encontró el archivo de credenciales '{SERVICE_ACCOUNT_FILE}'.")
-        print("Asegúrate de que esté en la raíz del proyecto y configurado en settings.py")
-        return None
     except Exception as e:
         print(f"Error durante la autenticacion: {e}")
         return None
@@ -120,8 +130,7 @@ def lista_ids_archivos_optimizado(service, folder_id):
                     page_token = response.get('nextPageToken')
                     if not page_token:
                         break
-                except HttpError as error:
-                    print(f'Error al listar carpetas: {error}')
+                except HttpError:
                     break
     
     print(f"  -> Encontradas {folder_count} carpetas")
@@ -129,6 +138,7 @@ def lista_ids_archivos_optimizado(service, folder_id):
     file_ids = set()
     folder_list = list(all_folder_ids)
     
+    # Batch processing para archivos
     for i in range(0, len(folder_list), 20):
         batch_folders = folder_list[i:i+20]
         folder_conditions = " or ".join([f"'{fid}' in parents" for fid in batch_folders])
@@ -152,8 +162,7 @@ def lista_ids_archivos_optimizado(service, folder_id):
                 page_token = response.get('nextPageToken')
                 if not page_token:
                     break
-            except HttpError as error:
-                print(f'Error al listar archivos: {error}')
+            except HttpError:
                 break
             
         if (i + 20) % 100 == 0 and i > 0:
@@ -172,11 +181,6 @@ def obtener_pagina_auditoria(admin_service, start_time_iso, page_token=None):
                 pageToken=page_token
             ).execute()
             return results.get('items', []), results.get('nextPageToken')
-        except HttpError as error:
-            if intento < MAX_RETRIES - 1:
-                time.sleep(2 ** intento)
-                continue
-            return [], None
         except Exception as e:
             if intento < MAX_RETRIES - 1:
                 time.sleep(2 ** intento)
@@ -241,7 +245,6 @@ def consultar_auditoria_optimizado(credentials, start_time_iso, target_file_ids)
                             
                             del futures[future]
                         except Exception as e:
-                            print(f"  ⚠️  Error en página: {e}")
                             if future in futures:
                                 token = futures[future]
                                 if token not in pending_tokens:
@@ -249,8 +252,7 @@ def consultar_auditoria_optimizado(credentials, start_time_iso, target_file_ids)
                                     pending_tokens.append(token)
                                 del futures[future]
                 
-                except Exception as e:
-                    print(f"  ⚠️  Timeout en lote, continuando...")
+                except Exception:
                     time.sleep(1)
     
     print(f"  ✓ Descarga completada: {completed} páginas")
@@ -286,51 +288,43 @@ def filtrar_pagina(activities, target_ids_set):
             
             if doc_id and doc_id in target_ids_set:
                 try:
-                    ### MODIFICACIÓN DJANGO: Necesitamos el objeto datetime, no el string formateado ###
                     utc_time = datetime.fromisoformat(event_time_str.replace("Z", "+00:00"))
                     
                     eventos_relevantes.append({
-                        "timestamp": utc_time, # <- ENVIAMOS EL OBJETO DATETIME
+                        "timestamp": utc_time,
                         "usuario": actor_email,
                         "accion": event_name,
                         "archivo_id": doc_id,
                         "archivo_titulo": doc_title,
                         "ip": ip_address,
-                        "detalles_json": activity # <- Guardamos el evento crudo
+                        "detalles_json": activity
                     })
-                except Exception as e:
-                    print(f"Error parseando evento: {e}")
+                except Exception:
+                    pass
     
     return eventos_relevantes
 
-# --- FIN DE TU SCRIPT ORIGINAL ---
+# --- GUARDADO EN BD ESTANDARIZADO (HASH MD5) ---
 
-
-### MODIFICACIÓN DJANGO: Nueva función para cargar datos en la BD ###
 def guardar_eventos_en_db(eventos_relevantes):
     """
-        Toma la lista de eventos relevantes y los carga en el modelo EventoDeAcceso.
-        Usa el id_evento_google para evitar duplicados reales.
+        Carga eventos usando el mismo generador de IDs que el proceso Offline.
     """
-    print(f"\n--- Paso 3: Cargando {len(eventos_relevantes)} eventos en la Base de Datos Django ---")
+    print(f"\n--- Paso 3: Cargando {len(eventos_relevantes)} eventos en BD ---")
     
     eventos_creados = 0
     eventos_actualizados = 0
     
     for evento in eventos_relevantes:
         try:
-            # Extraemos el ID único del evento de Google (está dentro de 'detalles_json')
-            # La estructura usual es: id: { time: "...", uniqueQualifier: "..." }
-            # Usaremos una combinación de time + uniqueQualifier como ID único
-            detalles = evento.get('detalles_json', {})
-            id_info = detalles.get('id', {})
-            unique_qualifier = id_info.get('uniqueQualifier', 'no_qualifier')
-            time_str = id_info.get('time', str(evento['timestamp']))
+            # Usamos MD5 para ser consistentes con el histórico
+            google_id = generar_id_unico(
+                evento['timestamp'],
+                evento['usuario'],
+                evento['archivo_id'],
+                evento['accion']
+            )
 
-            # Generamos un ID robusto
-            google_id = f"{time_str}_{unique_qualifier}"
-
-            # Usuamos update_or_create basandonos en el ID DE GOOGLE
             obj, created = EventoDeAcceso.objects.update_or_create(
                 id_evento_google = google_id, # Usamos el ID único
                 defaults={
@@ -340,8 +334,7 @@ def guardar_eventos_en_db(eventos_relevantes):
                     'nombre_archivo': evento['archivo_titulo'],
                     'tipo_evento': evento['accion'],
                     'direccion_ip': evento['ip'],
-                    'detalles': detalles,
-                    # 'es_anomalia' No se toca aqui, se deja como esté o False si es nuevo
+                    'detalles': evento.get('detalles_json', {}),
                 }
             )
             
@@ -351,14 +344,10 @@ def guardar_eventos_en_db(eventos_relevantes):
                 eventos_actualizados += 1
         
         except Exception as e:
-            # --- MANEJO DE ERRORES ---
-            # Si el error es específicamente por el campo de IP (ej: IPv6 malformada)
             if "direccion_ip" in str(e):
-                 print(f"Error guardando IP: {evento['ip']}. Reintentando con IP genérica...")
-
-                 # --- INTENTO 2: REINTENTO ---
+                 # Reintento con IP neutra si falla la validacion
                  try:
-                    obj, created = EventoDeAcceso.objects.update_or_create(
+                    EventoDeAcceso.objects.update_or_create(
                         id_evento_google=google_id,
                         defaults={
                             'timestamp': evento['timestamp'],
@@ -366,301 +355,164 @@ def guardar_eventos_en_db(eventos_relevantes):
                             'archivo_id': evento['archivo_id'],
                             'nombre_archivo': evento['archivo_titulo'],
                             'tipo_evento': evento['accion'],
-                            'direccion_ip': '0.0.0.0', # <--- Usamos IP neutra para salvar el evento
-                            'detalles': detalles, # El JSON sí conserva la IP original para auditoría forense
+                            'direccion_ip': '0.0.0.0', 
+                            'detalles': evento.get('detalles_json', {}),
                         }
                     )
-                    if created: eventos_creados += 1
-                    else: eventos_actualizados += 1
-                    print("   -> ¡Evento salvado exitosamente!")
-
-                 except Exception as e2:
-                     print(f"Error fatal incluso al reintentar: {e2}")
-            else:
-                print(f"Error no recuperable al guardar evento {evento.get('accion')}: {e}")
+                 except:
+                     pass
 
     print(f"✓ Carga a BD completada.")
-    print(f"  -> Eventos nuevos creados: {eventos_creados}")
-    print(f"  -> Eventos existentes actualizados: {eventos_actualizados}")
+    print(f"  -> Nuevos: {eventos_creados} | Actualizados: {eventos_actualizados}")
 
+# --- BACKUP COMPLETO ---
+
+def guardar_reporte_json_desde_bd():
+    """
+        Exporta TODOS los eventos (Históricos + Nuevos) a un solo JSON consolidado.
+    """
+    try:
+        base_dir = Path(settings.BASE_DIR)
+        cache_dir = base_dir / 'cache_sgsi'
+        report_path = cache_dir / 'reporte_historico.json'
+
+        cache_dir.mkdir(parents=True, exist_ok= True)
+
+        print(f"\n📁 Generando Backup Consolidado en: {report_path}")
+
+        # Obtenemos TODO para no perder historia
+        eventos_db = EventoDeAcceso.objects.all().order_by('-timestamp').values()
+
+        eventos_list = []
+        for evento in eventos_db:
+            ts = evento['timestamp']
+            hora_fmt = ts.strftime("%d/%m/%Y %I:%M %p") if ts else "N/A"
+
+            eventos_list.append({
+                "hora": hora_fmt, 
+                "usuario": evento['email_usuario'],
+                "accion": evento['tipo_evento'],
+                "archivo": f"{evento['nombre_archivo']} ({evento['archivo_id']})",
+                "ip": evento['direccion_ip']
+            })
+        
+        archivo_ids = set(e['archivo_id'] for e in eventos_db if e['archivo_id'])
+
+        reporte = {
+            'periodo_dias': "HISTORICO_COMPLETO",
+            'fecha_consulta': datetime.now(timezone.utc).isoformat(),
+            'total_eventos_procesados': len(eventos_list),
+            'eventos_relevantes': len(eventos_list),
+            'archivos_monitoreados': len(archivo_ids),
+            'eventos': eventos_list
+        }
+
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(reporte, f, indent= 2, ensure_ascii=False)
+
+        print(f"✓ Backup actualizado: {len(eventos_list)} eventos totales.")
+        return True
+
+    except Exception as e:
+        print(f"Error guardando reporte JSON {e}")
+        return False
+
+def refrescar_token_google():
+    try:
+        base_dir = Path(settings.BASE_DIR)
+        cache_file = base_dir / 'cache_sgsi' / 'inventory_cache'
+
+        if not cache_file.exists(): return True
+
+        with open(cache_file, 'rb') as f:
+            cache_data = pickle.load(f)
+        
+        age_hours = (datetime.now() - cache_data.get('timestamp')).total_seconds() / 3600
+
+        if age_hours >= CACHE_EXPIRY_HOURS:
+            cache_file.unlink()
+            print(f"Token caducado eliminado (edad: {age_hours:.1f} hours)")
+
+        return True
+    except:
+        return True
 
 # ============================================================================
 # CLASE GoogleDriveCollector (NUEVA - para usar en views.py)
 # ============================================================================
 
 class GoogleDriveCollector:
-    """
-    Clase que encapsula toda la lógica de recolección de eventos de Google Drive.
-    Usada por las vistas y APIs.
-    """
-    
+    """Clase wrapper para usar desde views.py"""
     def __init__(self):
         self.credentials = None
-        self.target_file_ids = None
         
     def obtener_eventos(self):
-        """
-        Obtiene eventos de Google Drive Activity API.
+        # Reutilizamos la lógica del comando, pero retornando la lista
+        # Nota: Por simplicidad, instanciamos el comando para ejecutar su logica central
+        # o llamamos a las funciones directamente.
+
+        refrescar_token_google()
+        creds = autenticar_cuenta_servicio()
+        if not creds: return []
         
-        Retorna lista de eventos crudos de la API.
-        """
-        # 1. Autenticar
-        self.credentials = autenticar_cuenta_servicio()
-        if not self.credentials:
-            print("❌ Fallo en autenticación")
-            return []
-        
-        # 2. Obtener inventario
-        cached_inventory = cargar_inventario_cache()
-        if cached_inventory:
-            self.target_file_ids, _ = cached_inventory
+        cached = cargar_inventario_cache()
+        if cached:
+            t_ids, _ = cached
         else:
-            drive_service = build('drive', 'v3', credentials=self.credentials)
-            self.target_file_ids, _ = lista_ids_archivos_optimizado(
-                drive_service, 
-                TARGET_FOLDER_ID
-            )
-            guardar_inventario_cache(self.target_file_ids, _)
-        
-        if not self.target_file_ids:
-            print("❌ No hay archivos para monitorear")
-            return []
-        
-        # 3. Consultar auditoría
-        start_time_iso = (
-            datetime.now(timezone.utc) - timedelta(days=DIAS_A_CONSULTAR)
-        ).isoformat()
-        
-        eventos_relevantes, total_eventos = consultar_auditoria_optimizado(
-            self.credentials,
-            start_time_iso,
-            self.target_file_ids
-        )
-        
-        print(f"✅ Recolector obtuvo {len(eventos_relevantes)} eventos")
-        return eventos_relevantes
+            svc = build('drive', 'v3', credentials=creds)
+            t_ids, count = lista_ids_archivos_optimizado(svc, TARGET_FOLDER_ID)
+            guardar_inventario_cache(t_ids, count)
 
-# Modificacion para Backup automático y refresh de inventory_cache.pkl
+        start_iso = (datetime.now(timezone.utc) - timedelta(days=DIAS_A_CONSULTAR)).isoformat()
+        evs, _ = consultar_auditoria_optimizado(creds, start_iso, t_ids)
+        
+        return evs
 
-# ============================================================================
-# NUEVAS FUNCIONES: Backup automático y refresh de token (VERSIÓN CORRECTA)
-# Rutas adaptadas para cache_sgsi/
-# ============================================================================
-
-def refrescar_token_google():
-    """
-    🔄 Elimina inventory_cache.pkl CADUCADO para forzar re-autenticación.
-    
-    Se ejecuta ANTES de obtener_eventos() si el token está viejo.
-    
-    Busca en:
-    - cache_sgsi/inventory_cache.pkl
-    - cache_sqls/token.pickle (compatibilidad)
-    """
-    try:
-        base_dir = Path(settings.BASE_DIR)
-        cache_file = base_dir / 'cache_sgsi' / 'inventory_cache.pkl'
-        
-        if not cache_file.exists():
-            print("No hay token en cache. Se generará uno nuevo.")
-            return True
-        
-        # 🔍 VERIFICAR SI ESTÁ CADUCADO
-        try:
-            with open(cache_file, 'rb') as f:
-                cache_data = pickle.load(f)
-            
-            cache_time = cache_data.get('timestamp')
-            if cache_time:
-                age_hours = (datetime.now() - cache_time).total_seconds() / 3600
-                
-                if age_hours >= CACHE_EXPIRY_HOURS:  # 24 horas
-                    # ✅ CADUCADO → Eliminar
-                    cache_file.unlink()
-                    print(f"Token caducado eliminado (edad: {age_hours:.1f} horas)")
-                    return True
-                else:
-                    # ❌ AÚN VÁLIDO → No tocar
-                    print(f"Token aún válido (edad: {age_hours:.1f} horas)")
-                    return True
-        except Exception as e:
-            print(f"Error verificando token: {e}")
-            return True
-        
-        return True
-        
-    except Exception as e:
-        print(f"Error refrescando token: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def guardar_reporte_json_desde_bd():
-    """
-    🔄 Exporta TODOS los eventos desde BD a cache_sgsi/reporte_historico.json
-    
-    Esto permite que cargar_json_historico.py restaure la información si falta.
-    
-    Se guarda en:
-    - cache_sgsi/reporte_historico.json ← Ubicación CORRECTA
-    """
-    import json
-    
-    try:
-        base_dir = Path(settings.BASE_DIR)
-        cache_dir = base_dir / 'cache_sgsi'
-        report_path = cache_dir / 'reporte_historico.json'
-        
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        print(f"\n📁 Exportando eventos a JSON: {report_path}")
-        
-        # Obtener TODOS los eventos de la BD
-        eventos_db = EventoDeAcceso.objects.all().order_by('-timestamp').values(
-            'email_usuario',
-            'direccion_ip',
-            'timestamp',
-            'archivo_id',
-            'nombre_archivo',
-            'tipo_evento',
-            'es_anomalia',
-            'detalles'
-        )
-        
-        # Convertir a lista y formatear para JSON
-        eventos_list = []
-        for evento in eventos_db:
-            evento_dict = dict(evento)
-            timestamp = evento_dict['timestamp']
-            
-            # Convertir datetime a string ISO
-            if timestamp:
-                timestamp_str = timestamp.isoformat()
-            else:
-                timestamp_str = None
-            
-            # Formatear para el JSON original (con 'hora' formateada)
-            from datetime import datetime
-            if timestamp:
-                hora_formateada = timestamp.strftime("%d/%m/%Y %I:%M %p")
-            else:
-                hora_formateada = "N/A"
-            
-            eventos_list.append({
-                "hora": hora_formateada,
-                "usuario": evento_dict['email_usuario'],
-                "accion": evento_dict['tipo_evento'],
-                "archivo": f"({evento_dict['archivo_id']})",  # Simplificado
-                "ip": evento_dict['direccion_ip']
-            })
-        
-        # Crear estructura del reporte (formato original)
-        # Obtener lista de archivo_ids únicos
-        archivo_ids_unicos = EventoDeAcceso.objects.values_list('archivo_id', flat=True).distinct()
-
-        reporte = {
-            'periodo_dias': DIAS_A_CONSULTAR,
-            'fecha_consulta': datetime.now(timezone.utc).isoformat(),
-            'total_eventos_procesados': len(eventos_list),
-            'eventos_relevantes': len([e for e in eventos_list if e['usuario']]),
-            'archivos_monitoreados': len(set(archivo_ids_unicos)),
-            'eventos': eventos_list
-        }
-        
-        # Guardar a JSON con encoding UTF-8
-        with open(report_path, 'w', encoding='utf-8') as f:
-            json.dump(reporte, f, indent=2, ensure_ascii=False)
-        
-        print(f"Reporte JSON actualizado: {len(eventos_list)} eventos guardados")
-        print(f"   Ubicación: {report_path}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"Error guardando reporte JSON: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-# Fin de Modificacion para Backup automático y refresh de inventory_cache.pkl
-
-### MODIFICACIÓN DJANGO: Envoltura del comando ###
 class Command(BaseCommand):
-    help = 'Ejecuta el script real de recolección de eventos de Google Drive y los carga en la base de datos.'
+    help = 'Ejecuta el ETL Online (Recolección en tiempo real)'
 
     def handle(self, *args, **kwargs):
-        """Función principal (reemplaza tu 'correr_monitoreo' y '__main__')"""
+        self.stdout.write(self.style.SUCCESS("INICIANDO RECOLECCIÓN REAL (ONLINE)"))
         
-        self.stdout.write(self.style.SUCCESS("\n" + "="*80))
-        self.stdout.write(self.style.SUCCESS("INICIANDO RECOLECCIÓN REAL DE EVENTOS DE GOOGLE DRIVE"))
-        self.stdout.write(self.style.SUCCESS("="*80))
-        
-         # 🔄 NUEVA LÍNEA - Refrescar token ANTES de obtener eventos
+        # 1. Autenticación
         print("\n📌 Verificando token de autenticación...")
         refrescar_token_google()
-
-        start_time_total = time.time()
-        
         credentials = autenticar_cuenta_servicio()
+        
         if not credentials:
-            self.stderr.write(self.style.ERROR("Fallo en la autenticación. Abortando."))
+            self.stderr.write("Error de credenciales. Abortando.")
             return
 
-        # --- Paso 1: Inventario (con cache) ---
-        self.stdout.write(self.style.WARNING('\n--- Paso 1: Inventario de Archivos (con cache) ---'))
-        start_time_inventory = time.time()
+        # 2. Inventario
+        self.stdout.write('\n--- Paso 1: Inventario ---')
+        cached = cargar_inventario_cache()
         
-        cached_inventory = cargar_inventario_cache()
-        
-        if cached_inventory:
-            target_file_ids, total_folders = cached_inventory
-            duration_inventory = time.time() - start_time_inventory
-            print(f"✓ Inventario cargado desde cache en {duration_inventory:.2f} segundos")
+        if cached:
+            t_ids, count = cached
         else:
-            drive_service = build('drive', 'v3', credentials=credentials)
-            target_file_ids, total_folders = lista_ids_archivos_optimizado(drive_service, TARGET_FOLDER_ID)
-            guardar_inventario_cache(target_file_ids, total_folders)
-            duration_inventory = time.time() - start_time_inventory
-            print(f'✓ Inventario completado en {duration_inventory:.2f} segundos')
+            # Si no hay cache, buscamos en la API
+            svc = build('drive', 'v3', credentials=credentials)
+            t_ids, count = lista_ids_archivos_optimizado(svc, TARGET_FOLDER_ID)
+            guardar_inventario_cache(t_ids, count)
         
-        if not target_file_ids:
-            self.stderr.write(self.style.ERROR("No se encontraron archivos. Finalizando."))
-            return
-        
-        print(f"  -> 📄 Archivos a monitorear: {len(target_file_ids):,}")
-        print(f"  -> 📁 Carpetas encontradas: {total_folders:,}")
-        
-        # --- Paso 2: Auditoría optimizada ---
-        self.stdout.write(self.style.WARNING(f'\n--- Paso 2: Consultando auditoría (últimos {DIAS_A_CONSULTAR} días) ---'))
-        start_time_audit = time.time()
-        start_time_iso = (datetime.now(timezone.utc) - timedelta(days=DIAS_A_CONSULTAR)).isoformat()
-        
-        try:
-            eventos_relevantes, total_eventos = consultar_auditoria_optimizado(credentials, start_time_iso, target_file_ids)
-            
-            duration_audit = time.time() - start_time_audit
-            print(f"✓ Consulta completada en {duration_audit:.2f} segundos ({duration_audit/60:.2f} minutos)")
-            print(f"  -> Total de eventos procesados: {total_eventos:,}")
-            print(f"  -> Eventos relevantes encontrados: {len(eventos_relevantes):,}")
-            
-            # --- Paso 3: Cargar en BD (Reemplaza la impresión y guardado JSON) ---
-            if eventos_relevantes:
-                guardar_eventos_en_db(eventos_relevantes)
+        print(f"  -> Archivos a monitorear: {len(t_ids)}")
 
-            # 📁 NUEVA LÍNEA - Crear backup JSON automático
-            print("\n📁 Creando backup en JSON...")
-            guardar_reporte_json_desde_bd()
+        # 3. Auditoría
+        self.stdout.write('\n--- Paso 2: Auditoría ---')
+        # Calculamos la fecha de inicio (hace 30 días)
+        start_iso = (datetime.now(timezone.utc) - timedelta(days=DIAS_A_CONSULTAR)).isoformat()
+        
+        # Llamamos a la función de consulta
+        eventos, total_procesados = consultar_auditoria_optimizado(credentials, start_iso, t_ids)
 
-            if not eventos_relevantes:
-                self.stdout.write(self.style.SUCCESS("\nNo se encontraron eventos nuevos para cargar en la BD."))
-            
-            duration_total = time.time() - start_time_total
-            self.stdout.write(self.style.SUCCESS("\n" + "="*80))
-            self.stdout.write(self.style.SUCCESS(f"✓ RECOLECCIÓN COMPLETADA en {duration_total:.2f} segundos ({duration_total/60:.2f} minutos)"))
-            self.stdout.write(self.style.SUCCESS("="*80))
+        # 4. Carga a BD
+        if eventos:
+            guardar_eventos_en_db(eventos)
+        else:
+            print("  No hay eventos relevantes nuevos para guardar.")
 
-        except Exception as e:
-            self.stderr.write(self.style.ERROR(f"\nERROR INESPERADO: {e}"))
-            import traceback
-            traceback.print_exc()
+        # 5. Backup Automático
+        print("\n📁 Actualizando Backup Consolidado (Full Snapshot)...")
+        guardar_reporte_json_desde_bd()
+
+        self.stdout.write(self.style.SUCCESS("\n✓ PROCESO ONLINE FINALIZADO"))
