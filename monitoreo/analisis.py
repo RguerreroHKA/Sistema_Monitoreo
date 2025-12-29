@@ -3,7 +3,7 @@ import pandas as pd
 import joblib
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, davies_bouldin_score
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta     
@@ -78,19 +78,26 @@ def ejecutar_deteccion_anomalias():
     modelo.fit(X)
 
     # --- 4. EVALUACIÓN DEL MODELO (METRICS) ---
-    # Calculamos la métrica de Silueta (Silhouette Score)
     try:
         # Usamos una muestra si hay demasiados datos para no congelar el equipo
         if len(X) > 20000:
             X_sample = X.sample(n=10000, random_state=42)
             labels_sample = modelo.predict(X_sample)
+
+            # 1. Silueta (Silhouette Score)
             score_silueta = silhouette_score(X_sample, labels_sample)
+
+            # 2. Davies-Bouldin Score
+            score_db = davies_bouldin_score(X_sample, labels_sample)
+
         else:
             labels = modelo.predict(X)
             score_silueta = silhouette_score(X, labels)
+            score_db = davies_bouldin_score(X, labels)
 
-        print(f"📈 [IA] Evaluación del Modelo - Silhouette Score: {score_silueta:.4f}")
-        print("    (Cerca de 1.0 = Separación perfecta, Cerca de -1.0 = Mezcla incorrecta)")
+        print(f"📈 [IA] Métricas de Evaluación:")
+        print(f"   - Silhouette Score: {score_silueta:.4f} (Mayor es mejor)")
+        print(f"   - Davies-Bouldin:   {score_db:.4f} (Menor es mejor)")
     
     except Exception as e:
         print(f"⚠️ [IA] No se pudo calcular métrica de silueta: {e}")
