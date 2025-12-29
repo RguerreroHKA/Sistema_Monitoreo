@@ -116,11 +116,20 @@
                 </div>
 
                 <div class="col-md-3">
-                    <label class="small font-weight-bold">Estado</label>
+                    <label class="small font-weight-bold">Estado / Severidad</label>
                     <select name="anomalia" class="form-select form-control bg-light border-0 small">
                         <option value="">-- Todos --</option>
-                        <option value="si" {% if filtro_anomalia == 'si' %}selected{% endif %}>Sólo Anomalías</option>
-                        <option value="no" {% if filtro_anomalia == 'no' %}selected{% endif %}>Sólo Normales</option>
+                        
+                        <optgroup label="Básico">
+                            <option value="no" {% if filtro_anomalia == 'no' %}selected{% endif %}>🟢 Sólo Normales</option>
+                            <option value="si" {% if filtro_anomalia == 'si' %}selected{% endif %}>🔴 Todas las Anomalías</option>
+                        </optgroup>
+
+                        <optgroup label="Por Severidad">
+                            <option value="CRITICA" {% if filtro_anomalia == 'CRITICA' %}selected{% endif %}>🚨 Sólo CRÍTICAS</option>
+                            <option value="ALTA" {% if filtro_anomalia == 'ALTA' %}selected{% endif %}>🔥 Sólo ALTAS</option>
+                            <option value="MEDIA" {% if filtro_anomalia == 'MEDIA' %}selected{% endif %}>⚠️ Sólo MEDIAS</option>
+                        </optgroup>
                     </select>
                 </div>
 
@@ -166,7 +175,13 @@
                             <td><small class="text-monospace">{{ evento.direccion_ip }}</small></td>
                             <td class="text-center">
                                 {% if evento.es_anomalia %}
-                                    <span class="badge bg-danger shadow-sm">ANOMALÍA</span>
+                                    {% if evento.severidad == 'CRITICA' %}
+                                        <span class="badge bg-dark shadow-sm">🚨 CRÍTICA</span>
+                                    {% elif evento.severidad == 'ALTA' %}
+                                        <span class="badge bg-danger shadow-sm">🔥 ALTA</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark shadow-sm">⚠️ MEDIA</span>
+                                    {% endif %}
                                 {% else %}
                                     <span class="badge bg-success shadow-sm">Normal</span>
                                 {% endif %}
@@ -230,7 +245,6 @@
     .text-gray-300 { color: #dddfeb !important; }
     .text-gray-800 { color: #5a5c69 !important; }
     
-    /* Ajuste para que las badges se vean bonitas */
     .badge { padding: 0.5em 0.75em; }
     .text-monospace { font-family: monospace; }
 </style>
@@ -306,6 +320,7 @@
         .then(response => response.json())
         .then(data => {
             mostrarAlerta(data.mensaje, 'info');
+            setTimeout(() => location.reload(), 2000);
         })
         .finally(() => {
             btn.disabled = false;

@@ -1,86 +1,155 @@
+import os
 import pandas as pd
+import joblib
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import LabelEncoder
-from .models import EventoDeAcceso
-from django.utils import timezone  
+from sklearn.metrics import silhouette_score
+from django.conf import settings
+from django.utils import timezone
 from datetime import timedelta     
+from .models import EventoDeAcceso
 
 def ejecutar_deteccion_anomalias():
     """
-    Obtiene todos los eventos de acceso de una "ventana de tiempo" (ej. 180 días),
-    los procesa y usa Isolation Forest para marcar anomalías.
+    SPRINT 5: Pipeline completo de Machine Learning.
+    1. Preprocesamiento y Limpieza.
+    2. Entrenamiento (Isolation Forest).
+    3. Evaluación (Métricas de Silueta).
+    4. Serialización (Guardado del modelo).
+    5. Scoring y Persistencia en BD.
     """
     
-    # --- INICIO DE LA LÓGICA DE VENTANA DE TIEMPO ---
-    
-    # 1. Definir la ventana de análisis
-    # ¡Aquí está la variable! La ponemos en 180 para que analice
-    # todos los datos históricos que acabamos de cargar.
+    # --- 1. CONFIGURACIÓN Y CARGA DE DATOS ---
     DIAS_DE_VENTANA = 180 
     fecha_limite = timezone.now() - timedelta(days=DIAS_DE_VENTANA)
 
-    print(f"Iniciando detección de anomalías para los últimos {DIAS_DE_VENTANA} días...")
+    print(f"\n🧠 [IA] Iniciando entrenamiento con ventana de {DIAS_DE_VENTANA} días...")
 
-    # 2. Obtener SÓLO los eventos dentro de esa ventana de tiempo.
-    eventos_en_ventana = EventoDeAcceso.objects.filter(timestamp__gte=fecha_limite)
-    total_eventos = eventos_en_ventana.count()
+    eventos_qs = EventoDeAcceso.objects.filter(timestamp__gte=fecha_limite)
+    total_eventos = eventos_qs.count()
 
-    # 3. Reiniciar las marcas SÓLO para los eventos dentro de esta ventana.
-    # Esto soluciona el bug (275 vs 278) de forma eficiente.
-    print(f"Se analizarán {total_eventos} eventos.")
-    print("Reiniciando marcas de anomalías antiguas para esta ventana...")
-    eventos_en_ventana.update(es_anomalia=False)
-    
-    # --- FIN DE LA LÓGICA DE VENTANA DE TIEMPO ---
-
-    if total_eventos < 50: 
-        print(f"No hay suficientes datos (se necesitan 50, hay {total_eventos}) para ejecutar la detección.")
+    if total_eventos < 50:
+        print(f"⚠️ [IA] Datos insuficientes ({total_eventos}). Se requieren mínimo 50.")
         return 0
+    
+    print(f"📊 [IA] Cargando {total_eventos} eventos en memoria...")
 
-    # 1. Preparar datos con Pandas (ahora solo de la ventana)
-    print("Cargando datos en Pandas...")
-    df = pd.DataFrame(list(eventos_en_ventana.values()))
+    # Convertir QuerySet a DataFrame
+    df = pd.DataFrame(list(eventos_qs.values(
+        'id', 'email_usuario', 'direccion_ip', 'tipo_evento', 'archivo_id', 'timestamp'
+    )))
     df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-    # 2. Ingeniería de Características...
-    print("Realizando ingeniería de características...")
+    # --- 2. INGENIERÍA DE CARACTERÍSTICAS (FEATURE ENGINEERING) ---
+    print("🛠️ [IA] Preprocesando características...")
+
+    # Extracción de características temporales (Normalización temporal)
     df['hora'] = df['timestamp'].dt.hour
     df['dia_de_semana'] = df['timestamp'].dt.dayofweek 
 
-    # 3. Preprocesamiento...
-    print("Realizando preprocesamiento (LabelEncoder)...")
+    # Codificación de variables categóricas
+    encoders = {}
     features_categoricos = ['email_usuario', 'direccion_ip', 'tipo_evento', 'archivo_id']
+    
     for col in features_categoricos:
         if col in df.columns: # Asegurarse que la columna existe
             le = LabelEncoder()
+            # Convertimos a string para evitar errores con valores nulos
+            df[col] = df[col].astype(str)
             df[col] = le.fit_transform(df[col])
+            encoders[col] = le
+
+    # Selección de features finales para el modelo
+    features_modelo = ['email_usuario', 'direccion_ip', 'tipo_evento', 'archivo_id', 'hora', 'dia_de_semana']
+    X = df[features_modelo]
+    
+    # --- 3. ENTRENAMIENTO DEL MODELO (TRAINING) ---
+    print("🤖 [IA] Entrenando Isolation Forest (n_estimators=100, contamination=0.05)...")
+    
+    # Parámetros definidos en la propuesta
+    modelo = IsolationForest(
+        n_estimators=100,       # Número de árboles
+        contamination=0.05,     # Esperamos un 5% de anomalías
+        max_samples='auto',     # Muestreo automático
+        random_state=42,        # Reproducibilidad
+        n_jobs=-1               # Usar todos los núcleos del CPU (-1 es mejor rendimiento)
+    ) 
+
+    modelo.fit(X)
+
+    # --- 4. EVALUACIÓN DEL MODELO (METRICS) ---
+    # Calculamos la métrica de Silueta (Silhouette Score)
+    try:
+        # Usamos una muestra si hay demasiados datos para no congelar el equipo
+        if len(X) > 20000:
+            X_sample = X.sample(n=10000, random_state=42)
+            labels_sample = modelo.predict(X_sample)
+            score_silueta = silhouette_score(X_sample, labels_sample)
         else:
-            print(f"Advertencia: Columna {col} no encontrada en los datos recientes.")
+            labels = modelo.predict(X)
+            score_silueta = silhouette_score(X, labels)
 
-    # 4. Entrenar el Modelo y Predecir...
-    print("Entrenando modelo Isolation Forest y prediciendo...")
-    features_para_modelo = ['email_usuario', 'direccion_ip', 'tipo_evento', 'archivo_id', 'hora', 'dia_de_semana']
+        print(f"📈 [IA] Evaluación del Modelo - Silhouette Score: {score_silueta:.4f}")
+        print("    (Cerca de 1.0 = Separación perfecta, Cerca de -1.0 = Mezcla incorrecta)")
     
-    # Filtrar features que realmente existen en el DataFrame
-    features_reales = [f for f in features_para_modelo if f in df.columns]
-    
-    # Ajustamos la contaminación. Con más datos, podemos ser más sensibles.
-    # 0.05 (5%) de 25,000 es 1,250. Empecemos con algo más conservador: 1%
-    modelo = IsolationForest(contamination=0.01, random_state=42) 
-    predicciones = modelo.fit_predict(df[features_reales])
+    except Exception as e:
+        print(f"⚠️ [IA] No se pudo calcular métrica de silueta: {e}")
 
-    # 5. Actualizar la Base de Datos
-    print("Actualizando base de datos con nuevas anomalías...")
+    # --- 5. SERIALIZACIÓN (GUARDAR MODELOS) ---
+    ruta_modelo = os.path.join(settings.BASE_DIR, 'monitoreo', 'ml_models')
+    os.makedirs(ruta_modelo, exist_ok=True)
+    archivo_pkl = os.path.join(ruta_modelo, 'isolation_forest.pkl')
+
+    joblib.dump(modelo, archivo_pkl)
+    print(f"💾 [IA] Modelo serializado guardado en: {archivo_pkl}")
+
+    # --- 6. PREDICCIÓN Y SCORING ---
+    print("🔍 [IA] Detectando anomalías y calculando scores...")
+
+    # Predicción (-1 = Anomalía, 1 = Normal)
+    predicciones = modelo.predict(X)
+
+    # Score de anomalía (Valores negativos son más anómalos)
+    scores_raw = modelo.decision_function(X)
+
+    # Normalizamos el score para que quede bonito en el Dashboard (0 a 1)
+    scores_normalizados = 0.5 - scores_raw 
+
     df['es_anomalia'] = [True if p == -1 else False for p in predicciones]
+    df['anomaly_score'] = scores_normalizados
+
+    # Filtrar solo las que resultaron anómalas para actualizar la BD
+    anomalias_df = df[df['es_anomalia'] == True]
     
-    ids_anomalos = df[df['es_anomalia']]['id'].tolist()
+    ids_anomalos = anomalias_df['id'].tolist()
+
+    # --- 7. PERSISTENCIA EN BASE DE DATOS ---
+    print(f"📝 [IA] Actualizando {len(ids_anomalos)} eventos anómalos en BD...")
+
+    # A. Limpiar marcas anteriores en la ventana (Reset)
+    eventos_qs.update(es_anomalia=False, anomaly_score=0.0, severidad='BAJA')
+
+    # B. Actualizar anomalías detectadas
+    count = 0
+    for index, row in anomalias_df.iterrows():
+        try:
+            evento = EventoDeAcceso.objects.get(id=row['id'])
+            evento.es_anomalia = True
+            evento.anomaly_score = float(row['anomaly_score'])
+
+            # Asignar severidad basada en el score
+            if evento.anomaly_score > 0.75:
+                evento.severidad = 'CRITICA'
+            elif evento.anomaly_score > 0.60:
+                evento.severidad = 'ALTA'
+            else:
+                evento.severidad = 'MEDIA'
+
+            evento.save() # Esto dispara signals si las hay
+            count += 1
+
+        except EventoDeAcceso.DoesNotExist:
+            continue
     
-    # Actualizamos solo los que SÍ son anomalías esta vez
-    for evento_id in ids_anomalos:
-        evento = EventoDeAcceso.objects.get(id=evento_id)
-        evento.es_anomalia = True
-        # El score ya está en el modelo si lo agregamos antes
-        evento.save()  # TRIGGER: Activa signal de alerta
-    
-    print(f"Detección completada. Se marcaron {len(ids_anomalos)} eventos como anomalías.")
-    return len(ids_anomalos)
+    print(f"✅ [IA] Proceso finalizado. {count} anomalías registradas.")
+    return count

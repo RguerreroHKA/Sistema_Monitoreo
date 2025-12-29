@@ -17,13 +17,14 @@ except ImportError:
     GoogleDriveCollector = None
     guardar_eventos_en_db = None
 
-# --- INTEGRACION CON SPRINT 4 (FUTURO) ---
-"""try:
+# --- INTEGRACION CON SPRINT 5 (IA) ---
+try:
+    # Importamos la función real que creamos en analisis.py
     from .analisis import ejecutar_deteccion_anomalias
 except ImportError:
-    # Placeholder para que no falle si el archivo analisis.py aun no existe
+    # Fallback por si acaso, pero debería existir
     def ejecutar_deteccion_anomalias(): return 0
-"""
+
 # --- VISTAS ---
 
 @login_required
@@ -45,11 +46,19 @@ def dashboard_monitoreo(request):
     # 2. QuerySet Base (Ordenado por fecha)
     eventos = EventoDeAcceso.objects.all().order_by('-timestamp')
 
-    #3. Aplicar Filtros Dinámicos
-    if filtro_anomalia == 'si':
-        eventos = eventos.filter(es_anomalia=True)
-    elif filtro_anomalia == 'no':
-        eventos = eventos.filter(es_anomalia=False)
+    # 3. Aplicar Filtros Dinámicos (ACTUALIZADO SPRINT 5)
+    if filtro_anomalia:
+        if filtro_anomalia == 'no':
+            # Mostrar solo normales
+            eventos = eventos.filter(es_anomalia=False)
+
+        elif filtro_anomalia == 'si':
+            # Mostrar TODAS las anomalias (cualquier severidad)
+            eventos = eventos.filter(es_anomalia=True)
+
+        elif filtro_anomalia in ['CRITICA', 'ALTA', 'MEDIA']:
+            # Mostrar solo una severidad especifica
+            eventos = eventos.filter(severidad=filtro_anomalia)
 
     if filtro_tipo:
         eventos = eventos.filter(tipo_evento=filtro_tipo)
@@ -70,10 +79,9 @@ def dashboard_monitoreo(request):
     qs_anomalias = EventoDeAcceso.objects.filter(es_anomalia=True)
     total_anomalias = qs_anomalias.count()
 
-    eventos_nomrales = total_eventos - total_anomalias
+    eventos_normales = total_eventos - total_anomalias
 
-    # Recuperamos anomalias_criticas para tu tarjeta amarilla
-    # (Se llenará realmente en el Sprint 4)
+    # KPI Amarillo: Anomalías de alto riesgo
     anomalias_criticas = qs_anomalias.filter(severidad__in=['ALTA', 'CRITICA']).count()
 
     # 5. Tabla de "Últimas Anomalías"
@@ -94,7 +102,7 @@ def dashboard_monitoreo(request):
         'page_obj':             page_obj,               # Para la tabla principal
         'total_eventos':        total_eventos,          # KPI Azul
         'total_anomalias':      total_anomalias,        # KPI Rojo
-        'eventos_normales':     eventos_nomrales,
+        'eventos_normales':     eventos_normales,       # KPI Verde
         'anomalias_criticas':   anomalias_criticas,     # KPI Amarillo
         'anomalias_recientes':  anomalias_recientes,    # Tabla Pequeña roja
         'tipos_evento':         tipos_evento,           # Para el <select>
@@ -114,16 +122,16 @@ def dashboard_monitoreo(request):
 def api_sincronizar_eventos(request):
     """
         API para el botón 'Sincronizar'.
-        Usa el recolector del Sprint 2 para mantener consistencia.
+        Usa el recolector del Sprint 2/4 para mantener consistencia.
     """
     if not GoogleDriveCollector:
         return JsonResponse({'success': False, 'message': 'Error: Collector no encontrado'}, status=500)
 
     try:
-        #1. Instanciar Recolector
+        # 1. Instanciar Recolector
         collector = GoogleDriveCollector()
 
-        #2. Obtener eventos crudos de Google
+        # 2. Obtener eventos crudos de Google
         eventos_raw = collector.obtener_eventos()
 
         if not eventos_raw:
@@ -134,7 +142,6 @@ def api_sincronizar_eventos(request):
             })
         
         # 3. Guardar en BD (Reutilizando lógica del Sprint 2)
-
         count_inicio = EventoDeAcceso.objects.count()
         guardar_eventos_en_db(eventos_raw)
         count_fin = EventoDeAcceso.objects.count()
@@ -144,8 +151,6 @@ def api_sincronizar_eventos(request):
         return JsonResponse({
             'success': True,
             'mensaje': f'Sincronización exitosa. {nuevos} eventos nuevos registrados.',
-            #'nuevos': nuevos,
-            #'total_procesados': len(eventos_raw)
         })
     
     except Exception as e:
@@ -157,23 +162,18 @@ def api_sincronizar_eventos(request):
 @require_http_methods(["POST"])
 def api_ejecutar_deteccion(request):
     """
-        API Placeholder para el botón 'Detectar' (Sprint 3).
-        Evita que el botón de error hasta que integremos la IA en el Sprint 4.
+        API para el botón 'Detectar IA'.
+        Ejecuta el Isolation Forest real (Sprint 5).
     """
 
-    """try:
-        # Ejecutamos la función de análisis
+    try:
+        # Ejecutamos la función de análisis real
         contador_anomalias = ejecutar_deteccion_anomalias()
         
         return JsonResponse({
             'success': True,
-            'mensaje': f'Análisis completado. {contador_anomalias} anomalías detectadas.'
+            'mensaje': f'Análisis completado. Se detectaron/actualizaron {contador_anomalias} anomalías.'
         })
     except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)}, status=500)
-    """
-
-    return JsonResponse({
-        'success': True,
-        'mensaje': 'El módulo de IA se integrará completamente en el Sprint 4. Botón funcional.'
-    })
+        # Si algo falla (ej: falta memoria, error de sklearn), lo reportamos al frontend
+        return JsonResponse({'success': False, 'mensaje': f'Error en IA: {str(e)}'}, status=500)
