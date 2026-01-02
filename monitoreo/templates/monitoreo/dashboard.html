@@ -175,13 +175,17 @@
                             <td><small class="text-monospace">{{ evento.direccion_ip }}</small></td>
                             <td class="text-center">
                                 {% if evento.es_anomalia %}
-                                    {% if evento.severidad == 'CRITICA' %}
-                                        <span class="badge bg-dark shadow-sm">🚨 CRÍTICA</span>
-                                    {% elif evento.severidad == 'ALTA' %}
-                                        <span class="badge bg-danger shadow-sm">🔥 ALTA</span>
-                                    {% else %}
-                                        <span class="badge bg-warning text-dark shadow-sm">⚠️ MEDIA</span>
-                                    {% endif %}
+                                    <span class="badge {% if evento.severidad == 'CRITICA' %}bg-dark{% elif evento.severidad == 'ALTA' %}bg-danger{% else %}bg-warning text-dark{% endif %} shadow-sm"
+                                          data-bs-toggle="tooltip" 
+                                          data-bs-placement="top" 
+                                          title="{{ evento.motivo_anomalia|default:'Anomalía detectada por IA' }}"
+                                          style="cursor: help;">
+                                        
+                                        {% if evento.severidad == 'CRITICA' %}🚨 CRÍTICA
+                                        {% elif evento.severidad == 'ALTA' %}🔥 ALTA
+                                        {% else %}⚠️ MEDIA
+                                        {% endif %}
+                                    </span>
                                 {% else %}
                                     <span class="badge bg-success shadow-sm">Normal</span>
                                 {% endif %}
@@ -247,9 +251,21 @@
     
     .badge { padding: 0.5em 0.75em; }
     .text-monospace { font-family: monospace; }
+    
+    /* Estilo para que el tooltip se vea mejor si usas Bootstrap estándar */
+    .tooltip-inner {
+        max-width: 300px;
+        text-align: left;
+    }
 </style>
 
 <script>
+    // --- 1. Inicialización de Tooltips (NUEVO SPRINT 6) ---
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+
     function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== '') {

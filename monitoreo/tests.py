@@ -1,11 +1,13 @@
 from django.test import TestCase, Client
-from usuarios.models import UsuarioPersonalizado
+from django.core import mail
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
+from usuarios.models import UsuarioPersonalizado
 from .models import EventoDeAcceso
-import json
-
+# Importamos las funciones de alerta del Sprint 6
+from .utils_alertas import debe_enviar_alerta, enviar_alerta_anomalia, puede_enviar_alerta
 class EventoDeAccesoModelTests(TestCase):
     """
         Tests para el modelo EventoDeAcceso (Sprint 2)
@@ -106,3 +108,88 @@ class AdminInterfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         # Verificamos que el email aparezca en el HTML de respuesta
         self.assertContains(response, 'user@example.com')
+
+class SistemaAlertaTests(TestCase):
+    """
+        Tests para el Sistema de Alertas y Notificaciones (SPRINT 6)
+        Verifica: Filtros de severidad, Anti-Spam (Caché) y Contenido de Email.
+    """
+
+    def setUp(self):
+        """Configuración inicial antes de cada prueba"""
+        # Limpiar caché para evitar interferencias entre tests
+        cache.clear()
+
+        # Crear un evento base simulado una anomalía detectada
+        self.evento = EventoDeAcceso.objects.create(
+            id_evento_google='TEST-ALERT-001',
+            email_usuario="hacker@test.com",
+            tipo_evento="delete",
+            timestamp=timezone.now(),
+            direccion_ip="192.168.66.6",
+            nombre_archivo="datos_sensibles.pdf",
+            es_anomalia=True,
+            severidad='MEDIA', # Empezamos con MEDIA para probar el filtro
+            anomaly_score=0.55,
+            motivo_anomalia="Acceso en horario inusual (3:00 AM)"
+        )
+
+    def test_filtro_severidad_ignora_baja_media(self):
+        """Prueba que NO se envíe alerta si la severidad es BAJA o MEDIA"""
+        # Caso Media
+        self.evento.severidad = 'MEDIA'
+        self.assertFalse(debe_enviar_alerta(self.evento), "No debería alertar severidad MEDIA")
+
+        # Caso Baja
+        self.evento.severidad = 'BAJA'
+        self.assertFalse(debe_enviar_alerta(self.evento), "No debería alertar severidad BAJA")
+    
+    def test_filtro_severidad_permite_alta_critica(self):
+        """Prueba que SÍ se envíe alerta si es ALTA o CRITICA"""
+        # Caso Alta
+        self.evento.severidad = 'ALTA'
+        self.assertTrue(debe_enviar_alerta(self.evento), "Debería alertar severidad ALTA")
+
+        cache.clear()
+
+        # Caso Crítica
+        self.evento.severidad = 'CRITICA'
+        self.assertTrue(debe_enviar_alerta(self.evento), "Debería permitir alerta CRITICA")
+
+    def test_cache_antispam_bloquea_duplicados(self):
+        """
+            Prueba que el sistema bloquee alertas repetidas del mismo evento 
+            dentro de la ventana de tiempo (5 minutos).
+        """
+
+        # 1. Primera vez: Debe dejar pasar (retorna True
+        self.assertTrue(puede_enviar_alerta(self.evento.id, ventana_minutos=5))
+
+        # 2. Segunda vez inmediata: Debe bloquear (retorna False) porque está en caché
+        self.assertFalse(puede_enviar_alerta(self.evento.id, ventana_minutos=5))
+
+        # 3. Limpiamos caché (simulando que pasaron más de 5 minutos)
+        cache.clear()
+        # Ahora debería dejar pasar de nuevo
+        self.assertTrue(puede_enviar_alerta(self.evento.id, ventana_minutos=5))
+
+    def test_contenido_correo_alerta(self):
+        """
+            Prueba que el correo se construya con el asunto correcto 
+            y contenga el MOTIVO de la anomalía en el cuerpo.
+        """
+        self.evento.severidad = 'CRITICA'
+        
+        # Ejecutamos el envio real (simulado en memoria por Django)
+        enviar_alerta_anomalia(self.evento)
+
+        # Verificamos buzón de salida
+        self.assertEqual(len(mail.outbox), 1, "Debería haber 1 correo en bandeja de salida")
+
+        email = mail.outbox[0]
+
+        # Verificación de contenido
+        self.assertIn("ANOMALÍA CRITICA", email.subject) # Asunto correcto
+        self.assertIn("datos_sensibles.pdf", email.subject) # Archivo en asunto
+        self.assertIn("Acceso en horario inusual", email.body) # Motivo en el cuerpo
+        self.assertIn("hacker@test.com", email.body) # Usuario en el cuerpo
