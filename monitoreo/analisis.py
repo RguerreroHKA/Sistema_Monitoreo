@@ -9,14 +9,31 @@ from django.utils import timezone
 from datetime import timedelta     
 from .models import EventoDeAcceso
 
+def generar_explicacion(row):
+    """
+    SPRINT 6: Genera una explicación legible (Heurística)
+    basada en los datos del evento anómalo.
+    """
+    motivos = []
+
+    # 1. Análisis de Hora (Ej: Fuera de horario laboral 7am - 8pm)
+    # Ajusta estos rangos según la realidad de tu empresa
+    if row['hora'] < 7 or row['hora'] > 17:
+        motivos.append(f"Horario inusual ({row['hora']}:00)")
+    
+    # 2. Análisis de Día (Sábado=5, Domingo=6)
+    if row['dia_de_semana'] >= 5:
+        motivos.append("Acceso en fin de semana")
+
+    # 3. Análisis de Score
+    if not motivos:
+        motivos.append("Patrón atípico detectado por la IA")
+
+    return ", ".join(motivos)
+
 def ejecutar_deteccion_anomalias():
     """
-    SPRINT 5: Pipeline completo de Machine Learning.
-    1. Preprocesamiento y Limpieza.
-    2. Entrenamiento (Isolation Forest).
-    3. Evaluación (Métricas de Silueta).
-    4. Serialización (Guardado del modelo).
-    5. Scoring y Persistencia en BD.
+    SPRINT 5 & 6: Pipeline completo de ML + Explicabilidad.
     """
     
     # --- 1. CONFIGURACIÓN Y CARGA DE DATOS ---
@@ -134,7 +151,7 @@ def ejecutar_deteccion_anomalias():
     print(f"📝 [IA] Actualizando {len(ids_anomalos)} eventos anómalos en BD...")
 
     # A. Limpiar marcas anteriores en la ventana (Reset)
-    eventos_qs.update(es_anomalia=False, anomaly_score=0.0, severidad='BAJA')
+    eventos_qs.update(es_anomalia=False, anomaly_score=0.0, severidad='BAJA', motivo_anomalia=None)
 
     # B. Actualizar anomalías detectadas
     count = 0
@@ -151,6 +168,9 @@ def ejecutar_deteccion_anomalias():
                 evento.severidad = 'ALTA'
             else:
                 evento.severidad = 'MEDIA'
+
+            # Sprint 6: Guardar explicación heurística
+            evento.motivo_anomalia = generar_explicacion(row)
 
             evento.save() # Esto dispara signals si las hay
             count += 1

@@ -70,14 +70,16 @@ class EventoDeAcceso(models.Model):
         help_text='Nivel de criticidad de la anomalia'
     )
 
+    motivo_anomalia = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Explicación heurística de por qué se detectó como anomalía"
+    )
+
     # Evidencia Forense
     detalles = models.JSONField(null=True, blank=True, help_text="Datos originales en crudo de la API.")
 
-    """fecha_alerta = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='Cuando se envio la alerta'
-    )"""
     class Meta:
         # Ordena los eventos del mas reciente al mas antiguo
         verbose_name = "Evento de Acceso"

@@ -6,7 +6,7 @@ from .models import GLPITicket
 
 logger = logging.getLogger(__name__)
     
-def puede_enviar_alerta(evento_id, ventana_minutos=60): # Subí la ventana a 60 min para evitar spam
+def puede_enviar_alerta(evento_id, ventana_minutos=5): # Subí la ventana a 60 min para evitar spam
     """
     Verifica si ya enviamos alerta para este evento recientemente.
     Usa cache para evitar spam si el script corre varias veces.
@@ -59,6 +59,8 @@ def enviar_alerta_anomalia(evento):
     # Construir email
     asunto = f'🚨 ANOMALÍA {severidad}: {evento.nombre_archivo}'
 
+    motivo_texto = evento.motivo_anomalia if evento.motivo_anomalia else "Patrón atípico detectado"
+
     body = f"""
     ⚠️ ALERTA DE ANOMALÍA DETECTADA EN SGSI
     
@@ -72,6 +74,9 @@ def enviar_alerta_anomalia(evento):
     Fecha/Hora: {evento.timestamp}
     Score de Anomalía: {evento.anomaly_score:.4f}
     Severidad: {severidad}
+
+    🔍 MOTIVO DETECTADO:
+    {motivo_texto}
     
     ════════════════════════════════════════
     RECOMENDACIONES
